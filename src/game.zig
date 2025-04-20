@@ -1,8 +1,10 @@
 const std = @import("std");
 const engine = @import("engine");
 const common = @import("common");
+const map = @import("map.zig");
 
 pub const Engine = engine.Engine;
+pub const DungeonMap = map.Map(.DUNGEON, .color_true);
 const GAME_LOG = std.log.scoped(.game);
 
 pub const Game = struct {
@@ -11,7 +13,7 @@ pub const Game = struct {
     allocator: std.mem.Allocator = undefined,
     frame_limit: u64 = 16_666_667,
     lock: std.Thread.Mutex = undefined,
-    world: engine.Texture,
+    world: DungeonMap,
     window: engine.Texture,
     player: struct { x: i32, y: i32, color: common.Pixel, symbol: u8 } = .{ .x = 0, .y = 0, .color = common.Pixel.init(0, 0, 255, null), .symbol = '@' },
     const Self = @This();
@@ -19,7 +21,7 @@ pub const Game = struct {
     pub fn init(allocator: std.mem.Allocator) Error!Self {
         return Self{
             .allocator = allocator,
-            .world = engine.Texture.init(allocator),
+            .world = DungeonMap.init(allocator),
             .window = engine.Texture.init(allocator),
         };
     }
@@ -57,7 +59,7 @@ pub const Game = struct {
     pub fn on_render(self: *Self, dt: u64) !void {
         self.e.renderer.set_bg(0, 0, 0, self.window);
         _ = dt;
-        try self.e.renderer.draw_ascii_buffer(self.world.pixel_buffer, self.world.background_pixel_buffer, self.world.ascii_buffer, self.world.width, self.world.height, common.Rectangle{ .x = 0, .y = 0, .width = self.world.width, .height = self.world.height }, common.Rectangle{ .x = 0, .y = 0, .width = self.world.width, .height = self.world.height }, self.window);
+        try self.world.draw(0, 0, &self.e.renderer, self.window);
         self.e.renderer.draw_symbol(self.player.x, self.player.y, self.player.symbol, self.player.color, self.window);
         GAME_LOG.info("color buffer {any}\n ascii buffer {any}", .{ self.window.pixel_buffer, self.window.ascii_buffer });
         try self.e.renderer.flip(self.window, null);
@@ -66,16 +68,9 @@ pub const Game = struct {
         self.lock = std.Thread.Mutex{};
         self.e = try Engine(.ascii, .color_true).init(self.allocator);
         GAME_LOG.info("starting height {d}\n", .{self.e.renderer.terminal.size.height});
-        self.world.is_ascii = true;
         self.window.is_ascii = true;
         try self.window.rect(@intCast(self.e.renderer.terminal.size.width), @intCast(self.e.renderer.terminal.size.height), 0, 0, 0, 255);
-        try self.world.rect(@intCast(self.e.renderer.terminal.size.width), @intCast(self.e.renderer.terminal.size.height), 255, 0, 0, 255);
-        for (0..self.world.ascii_buffer.len) |i| {
-            self.world.ascii_buffer[i] = '#';
-        }
-        for (0..self.world.background_pixel_buffer.len) |i| {
-            self.world.background_pixel_buffer[i] = common.Pixel.init(0, 255, 0, null);
-        }
+        try self.world.generate(@intCast(self.e.renderer.terminal.size.width), @intCast(self.e.renderer.terminal.size.height));
         self.e.on_key_down(Self, on_key_down, self);
         self.e.on_render(Self, on_render, self);
         self.e.on_mouse_change(Self, on_mouse_change, self);
