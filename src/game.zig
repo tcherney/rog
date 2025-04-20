@@ -13,6 +13,7 @@ pub const Game = struct {
     lock: std.Thread.Mutex = undefined,
     world: engine.Texture,
     window: engine.Texture,
+    player: struct { x: i32, y: i32, color: common.Pixel, symbol: u8 } = .{ .x = 0, .y = 0, .color = common.Pixel.init(0, 0, 255, null), .symbol = '@' },
     const Self = @This();
     pub const Error = error{} || engine.Error || std.posix.GetRandomError || std.mem.Allocator.Error;
     pub fn init(allocator: std.mem.Allocator) Error!Self {
@@ -42,13 +43,22 @@ pub const Game = struct {
         GAME_LOG.info("{}\n", .{key});
         if (key == engine.KEYS.KEY_q) {
             self.running = false;
+        } else if (key == engine.KEYS.KEY_w) {
+            self.player.y -= 1;
+        } else if (key == engine.KEYS.KEY_a) {
+            self.player.x -= 1;
+        } else if (key == engine.KEYS.KEY_s) {
+            self.player.y += 1;
+        } else if (key == engine.KEYS.KEY_d) {
+            self.player.x += 1;
         }
     }
 
     pub fn on_render(self: *Self, dt: u64) !void {
         self.e.renderer.set_bg(0, 0, 0, self.window);
         _ = dt;
-        try self.e.renderer.draw_ascii_buffer(self.world.pixel_buffer, self.world.ascii_buffer, self.world.width, self.world.height, common.Rectangle{ .x = 0, .y = 0, .width = self.world.width, .height = self.world.height }, common.Rectangle{ .x = 0, .y = 0, .width = self.world.width, .height = self.world.height }, self.window);
+        try self.e.renderer.draw_ascii_buffer(self.world.pixel_buffer, self.world.background_pixel_buffer, self.world.ascii_buffer, self.world.width, self.world.height, common.Rectangle{ .x = 0, .y = 0, .width = self.world.width, .height = self.world.height }, common.Rectangle{ .x = 0, .y = 0, .width = self.world.width, .height = self.world.height }, self.window);
+        self.e.renderer.draw_symbol(self.player.x, self.player.y, self.player.symbol, self.player.color, self.window);
         GAME_LOG.info("color buffer {any}\n ascii buffer {any}", .{ self.window.pixel_buffer, self.window.ascii_buffer });
         try self.e.renderer.flip(self.window, null);
     }
@@ -62,6 +72,9 @@ pub const Game = struct {
         try self.world.rect(@intCast(self.e.renderer.terminal.size.width), @intCast(self.e.renderer.terminal.size.height), 255, 0, 0, 255);
         for (0..self.world.ascii_buffer.len) |i| {
             self.world.ascii_buffer[i] = '#';
+        }
+        for (0..self.world.background_pixel_buffer.len) |i| {
+            self.world.background_pixel_buffer[i] = common.Pixel.init(0, 255, 0, null);
         }
         self.e.on_key_down(Self, on_key_down, self);
         self.e.on_render(Self, on_render, self);
