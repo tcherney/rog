@@ -61,7 +61,7 @@ pub const Game = struct {
         _ = dt;
         try self.world.draw(0, 0, &self.e.renderer, self.window);
         self.e.renderer.draw_symbol(self.player.x, self.player.y, self.player.symbol, self.player.color, self.window);
-        GAME_LOG.info("color buffer {any}\n ascii buffer {any}", .{ self.window.pixel_buffer, self.window.ascii_buffer });
+        //GAME_LOG.info("color buffer {any}\n ascii buffer {any}", .{ self.window.pixel_buffer, self.window.ascii_buffer });
         try self.e.renderer.flip(self.window, null);
     }
     pub fn run(self: *Self) !void {
@@ -70,12 +70,13 @@ pub const Game = struct {
         GAME_LOG.info("starting height {d}\n", .{self.e.renderer.terminal.size.height});
         self.window.is_ascii = true;
         try self.window.rect(@intCast(self.e.renderer.terminal.size.width), @intCast(self.e.renderer.terminal.size.height), 0, 0, 0, 255);
-        try self.world.generate(@intCast(self.e.renderer.terminal.size.width), @intCast(self.e.renderer.terminal.size.height));
+        try self.world.generate(@intCast(self.e.renderer.terminal.size.width), @intCast(self.e.renderer.terminal.size.height / 2), 10);
         self.e.on_key_down(Self, on_key_down, self);
         self.e.on_render(Self, on_render, self);
         self.e.on_mouse_change(Self, on_mouse_change, self);
         self.e.on_window_change(Self, on_window_change, self);
         self.e.set_fps(60);
+        try common.gen_rand();
         try self.e.start();
 
         var timer: std.time.Timer = try std.time.Timer.start();
