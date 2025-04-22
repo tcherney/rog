@@ -12,6 +12,7 @@ const ColorMode = engine.ascii_graphics.ColorMode;
 const Texture = engine.Texture;
 const Rectangle = common.Rectangle;
 const rand = std.crypto.random;
+const Point = common.Point(2, usize);
 
 pub const Tile = struct {
     symbol: u8,
@@ -57,11 +58,20 @@ pub const Room = struct {
     pub fn has_conflict(self: *Room, other: *Room) bool {
         return self.x + self.width >= other.x and self.x <= other.x + other.width and self.y + self.height >= other.y and self.y <= other.y + other.height;
     }
+
+    pub fn contains_point(self: *const Room, p: Point) bool {
+        return p.x >= self.x and p.x <= self.x + self.width and p.y >= self.y and p.y <= self.y + self.height;
+    }
 };
 
 pub const DungeonTiles = struct {
     pub const FLOOR: Tile = Tile{ .symbol = '.', .color = Pixel.init(0, 255, 0, null), .bck_color = Pixel.init(0, 0, 0, null) };
     pub const WALL: Tile = Tile{ .symbol = '#', .color = Pixel.init(255, 0, 0, null), .bck_color = Pixel.init(0, 0, 0, null) };
+    pub const VERT_FLOOR: Tile = Tile{ .symbol = '.', .color = Pixel.init(0, 0, 255, null), .bck_color = Pixel.init(0, 0, 0, null) };
+    pub const VERT_WALL: Tile = Tile{ .symbol = '#', .color = Pixel.init(0, 0, 255, null), .bck_color = Pixel.init(0, 0, 0, null) };
+    pub const HOR_FLOOR: Tile = Tile{ .symbol = '.', .color = Pixel.init(255, 255, 0, null), .bck_color = Pixel.init(0, 0, 0, null) };
+    pub const HOR_WALL: Tile = Tile{ .symbol = '#', .color = Pixel.init(255, 255, 0, null), .bck_color = Pixel.init(0, 0, 0, null) };
+    pub const EMPTY: Tile = Tile{ .symbol = ' ', .color = Pixel.init(0, 0, 0, null), .bck_color = Pixel.init(0, 0, 0, null) };
 };
 
 pub const ForestTiles = struct {
@@ -94,6 +104,19 @@ pub fn Map(comptime map_type: MapType, comptime color_type: ColorMode) type {
             }
             self.rooms.deinit();
         }
+        pub fn valid_position(self: *Self, x: i32, y: i32) bool {
+            const x_usize: usize = @intCast(@as(u32, @bitCast(x)));
+            const y_usize: usize = @intCast(@as(u32, @bitCast(y)));
+            return self.tex.ascii_buffer[y_usize * self.width + x_usize] != TileType.WALL.symbol and self.tex.ascii_buffer[y_usize * self.width + x_usize] != TileType.HOR_WALL.symbol and self.tex.ascii_buffer[y_usize * self.width + x_usize] != TileType.VERT_WALL.symbol;
+        }
+        pub fn assign_tile(self: *Self, x: usize, y: usize, tile: Tile, overwrite: bool) void {
+            if (!overwrite) {
+                if (self.tex.ascii_buffer[y * self.width + x] == TileType.FLOOR.symbol) return;
+            }
+            self.tex.ascii_buffer[y * self.width + x] = tile.symbol;
+            self.tex.background_pixel_buffer[y * self.width + x] = tile.bck_color;
+            self.tex.pixel_buffer[y * self.width + x] = tile.color;
+        }
         //TODO add more parameters
         //TODO add generation
         pub fn generate(self: *Self, width: usize, height: usize, num_objects: usize) Error!void {
@@ -103,9 +126,9 @@ pub fn Map(comptime map_type: MapType, comptime color_type: ColorMode) type {
             self.height = height;
             try self.tex.rect(@intCast(width), @intCast(height), 0, 0, 0, 255);
             for (0..self.tex.pixel_buffer.len) |i| {
-                self.tex.pixel_buffer[i] = TileType.FLOOR.color;
-                self.tex.background_pixel_buffer[i] = TileType.FLOOR.bck_color;
-                self.tex.ascii_buffer[i] = TileType.FLOOR.symbol;
+                self.tex.pixel_buffer[i] = TileType.EMPTY.color;
+                self.tex.background_pixel_buffer[i] = TileType.EMPTY.bck_color;
+                self.tex.ascii_buffer[i] = TileType.EMPTY.symbol;
             }
             var cur_object: usize = 0;
             const MAX_ATTEMPTS = 20;
@@ -142,13 +165,114 @@ pub fn Map(comptime map_type: MapType, comptime color_type: ColorMode) type {
                 var indx: usize = 0;
                 for (room.y..room.y + room.height) |i| {
                     for (room.x..room.x + room.width) |j| {
-                        self.tex.ascii_buffer[i * self.width + j] = room.tiles[indx].symbol;
-                        self.tex.background_pixel_buffer[i * self.width + j] = room.tiles[indx].bck_color;
-                        self.tex.pixel_buffer[i * self.width + j] = room.tiles[indx].color;
+                        self.assign_tile(j, i, room.tiles[indx], true);
                         indx += 1;
                     }
                 }
+            }
+            for (0..self.rooms.items.len) |k| {
                 //TODO add corridor connecting the rooms
+                if (k < self.rooms.items.len - 1) {
+                    //find center of the two rooms
+                    const r1 = self.rooms.items[k];
+                    const r2 = self.rooms.items[k + 1];
+                    const r1_center: Point = .{ .x = r1.x + r1.width / 2, .y = r1.y + r1.height / 2 };
+                    const r2_center: Point = .{ .x = r2.x + r2.width / 2, .y = r2.y + r2.height / 2 };
+                    self.tex.ascii_buffer[r1_center.y * self.width + r1_center.x] = @intCast(48 + k);
+                    self.tex.ascii_buffer[r2_center.y * self.width + r2_center.x] = @intCast(48 + k + 1);
+                    var vertical: bool = rand.boolean();
+                    if (r1.contains_point(.{ .x = r1.x, .y = r2_center.y })) vertical = false;
+                    if (r1.contains_point(.{ .x = r2_center.x, .y = r1.y })) vertical = true;
+                    var curr_y: usize = r1_center.y;
+                    var curr_x: usize = r1_center.x;
+                    if (vertical) {
+                        std.debug.print("From room {d} to {d} going veritcal first", .{ k, k + 1 });
+                        if (r2_center.y > r1_center.y) {
+                            curr_y = r1.y + r1.height - 1;
+                            while (curr_y <= r2_center.y) : (curr_y += 1) {
+                                self.assign_tile(curr_x, curr_y, TileType.VERT_FLOOR, false);
+                                //if (r2.contains_point(.{ .x = curr_x, .y = curr_y })) break;
+                                self.assign_tile(curr_x - 1, curr_y, TileType.VERT_WALL, false);
+                                self.assign_tile(curr_x + 1, curr_y, TileType.VERT_WALL, false);
+                            }
+                            self.assign_tile(curr_x, curr_y, TileType.VERT_WALL, false);
+                            curr_y -= 1;
+                        } else {
+                            curr_y = r1.y;
+                            while (curr_y >= r2_center.y) : (curr_y -= 1) {
+                                self.assign_tile(curr_x, curr_y, TileType.VERT_FLOOR, false);
+                                //if (r2.contains_point(.{ .x = curr_x, .y = curr_y })) break;
+                                self.assign_tile(curr_x - 1, curr_y, TileType.VERT_WALL, false);
+                                self.assign_tile(curr_x + 1, curr_y, TileType.VERT_WALL, false);
+                            }
+                            self.assign_tile(curr_x, curr_y, TileType.VERT_WALL, false);
+                            curr_y += 1;
+                        }
+                        if (r2_center.x > r1_center.x) {
+                            curr_x += 1;
+                            while (r1.contains_point(.{ .x = curr_x, .y = curr_y })) curr_x += 1;
+                            self.assign_tile(curr_x, curr_y, TileType.HOR_FLOOR, false);
+                            while (curr_x <= r2.x) : (curr_x += 1) {
+                                self.assign_tile(curr_x, curr_y, TileType.HOR_FLOOR, false);
+                                self.assign_tile(curr_x, curr_y - 1, TileType.HOR_WALL, false);
+                                self.assign_tile(curr_x, curr_y + 1, TileType.HOR_WALL, false);
+                            }
+                        } else {
+                            curr_x -= 1;
+                            while (r1.contains_point(.{ .x = curr_x, .y = curr_y })) curr_x -= 1;
+                            self.assign_tile(curr_x, curr_y, TileType.HOR_FLOOR, false);
+                            while (curr_x >= r2.x + r2.width - 1) : (curr_x -= 1) {
+                                self.assign_tile(curr_x, curr_y, TileType.HOR_FLOOR, false);
+                                self.assign_tile(curr_x, curr_y - 1, TileType.HOR_WALL, false);
+                                self.assign_tile(curr_x, curr_y + 1, TileType.HOR_WALL, false);
+                            }
+                        }
+                    } else {
+                        std.debug.print("From room {d} to {d} going horizontal first", .{ k, k + 1 });
+                        if (r2_center.x > r1_center.x) {
+                            curr_x = r1.x + r1.width - 1;
+                            while (curr_x <= r2_center.x) : (curr_x += 1) {
+                                self.assign_tile(curr_x, curr_y, TileType.HOR_FLOOR, false);
+                                //if (r2.contains_point(.{ .x = curr_x, .y = curr_y })) break;
+                                self.assign_tile(curr_x, curr_y - 1, TileType.HOR_WALL, false);
+                                self.assign_tile(curr_x, curr_y + 1, TileType.HOR_WALL, false);
+                            }
+                            self.assign_tile(curr_x, curr_y, TileType.HOR_WALL, false);
+                            curr_x -= 1;
+                        } else {
+                            curr_x = r1.x;
+                            while (curr_x >= r2_center.x) : (curr_x -= 1) {
+                                self.assign_tile(curr_x, curr_y, TileType.HOR_FLOOR, false);
+                                //if (r2.contains_point(.{ .x = curr_x, .y = curr_y })) break;
+                                self.assign_tile(curr_x, curr_y - 1, TileType.HOR_WALL, false);
+                                self.assign_tile(curr_x, curr_y + 1, TileType.HOR_WALL, false);
+                            }
+                            self.assign_tile(curr_x, curr_y, TileType.HOR_WALL, false);
+                            curr_x += 1;
+                        }
+                        if (r2_center.y > r1_center.y) {
+                            curr_y += 1;
+                            while (r1.contains_point(.{ .x = curr_x, .y = curr_y })) curr_y += 1;
+                            self.assign_tile(curr_x, curr_y, TileType.HOR_FLOOR, false);
+                            while (curr_y <= r2.y) : (curr_y += 1) {
+                                self.assign_tile(curr_x, curr_y, TileType.VERT_FLOOR, false);
+                                //if (r2.contains_point(.{ .x = curr_x, .y = curr_y })) break;
+                                self.assign_tile(curr_x - 1, curr_y, TileType.VERT_WALL, false);
+                                self.assign_tile(curr_x + 1, curr_y, TileType.VERT_WALL, false);
+                            }
+                        } else {
+                            curr_y -= 1;
+                            while (r1.contains_point(.{ .x = curr_x, .y = curr_y })) curr_y -= 1;
+                            self.assign_tile(curr_x, curr_y, TileType.HOR_FLOOR, false);
+                            while (curr_y >= r2.y + r2.height - 1) : (curr_y -= 1) {
+                                self.assign_tile(curr_x, curr_y, TileType.VERT_FLOOR, false);
+                                //if (r2.contains_point(.{ .x = curr_x, .y = curr_y })) break;
+                                self.assign_tile(curr_x - 1, curr_y, TileType.VERT_WALL, false);
+                                self.assign_tile(curr_x + 1, curr_y, TileType.VERT_WALL, false);
+                            }
+                        }
+                    }
+                }
             }
         }
         pub fn draw(self: *Self, x: i32, y: i32, renderer: *AsciiGraphics(color_type), dest: ?Texture) Error!void {

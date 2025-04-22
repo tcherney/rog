@@ -15,7 +15,7 @@ pub const Game = struct {
     lock: std.Thread.Mutex = undefined,
     world: DungeonMap,
     window: engine.Texture,
-    player: struct { x: i32, y: i32, color: common.Pixel, symbol: u8 } = .{ .x = 0, .y = 0, .color = common.Pixel.init(0, 0, 255, null), .symbol = '@' },
+    player: struct { x: i32, y: i32, color: common.Pixel, symbol: u8 } = .{ .x = 0, .y = 0, .color = common.Pixel.init(255, 0, 255, null), .symbol = '@' },
     const Self = @This();
     pub const Error = error{} || engine.Error || std.posix.GetRandomError || std.mem.Allocator.Error;
     pub fn init(allocator: std.mem.Allocator) Error!Self {
@@ -47,12 +47,24 @@ pub const Game = struct {
             self.running = false;
         } else if (key == engine.KEYS.KEY_w) {
             self.player.y -= 1;
+            if (!self.world.valid_position(self.player.x, self.player.y)) {
+                self.player.y += 1;
+            }
         } else if (key == engine.KEYS.KEY_a) {
             self.player.x -= 1;
+            if (!self.world.valid_position(self.player.x, self.player.y)) {
+                self.player.x += 1;
+            }
         } else if (key == engine.KEYS.KEY_s) {
             self.player.y += 1;
+            if (!self.world.valid_position(self.player.x, self.player.y)) {
+                self.player.y -= 1;
+            }
         } else if (key == engine.KEYS.KEY_d) {
             self.player.x += 1;
+            if (!self.world.valid_position(self.player.x, self.player.y)) {
+                self.player.x -= 1;
+            }
         }
     }
 
@@ -70,7 +82,9 @@ pub const Game = struct {
         GAME_LOG.info("starting height {d}\n", .{self.e.renderer.terminal.size.height});
         self.window.is_ascii = true;
         try self.window.rect(@intCast(self.e.renderer.terminal.size.width), @intCast(self.e.renderer.terminal.size.height), 0, 0, 0, 255);
-        try self.world.generate(@intCast(self.e.renderer.terminal.size.width), @intCast(self.e.renderer.terminal.size.height / 2), 10);
+        try self.world.generate(@intCast(self.e.renderer.terminal.size.width), @intCast(self.e.renderer.terminal.size.height / 2), 5);
+        self.player.x = @intCast(@as(i64, @bitCast(self.world.rooms.items[0].x + self.world.rooms.items[0].width / 2)));
+        self.player.y = @intCast(@as(i64, @bitCast(self.world.rooms.items[0].y + self.world.rooms.items[0].height / 2)));
         self.e.on_key_down(Self, on_key_down, self);
         self.e.on_render(Self, on_render, self);
         self.e.on_mouse_change(Self, on_mouse_change, self);
