@@ -64,18 +64,22 @@ pub const Room = struct {
     }
 };
 
+pub const BLACK = Pixel.init(0, 0, 0, 255);
+
 pub const DungeonTiles = struct {
-    pub const FLOOR: Tile = Tile{ .symbol = '.', .color = Pixel.init(0, 255, 0, null), .bck_color = Pixel.init(0, 0, 0, null) };
-    pub const WALL: Tile = Tile{ .symbol = '#', .color = Pixel.init(255, 0, 0, null), .bck_color = Pixel.init(0, 0, 0, null) };
-    pub const VERT_FLOOR: Tile = Tile{ .symbol = '.', .color = Pixel.init(0, 0, 255, null), .bck_color = Pixel.init(0, 0, 0, null) };
-    pub const VERT_WALL: Tile = Tile{ .symbol = '#', .color = Pixel.init(0, 0, 255, null), .bck_color = Pixel.init(0, 0, 0, null) };
-    pub const HOR_FLOOR: Tile = Tile{ .symbol = '.', .color = Pixel.init(255, 255, 0, null), .bck_color = Pixel.init(0, 0, 0, null) };
-    pub const HOR_WALL: Tile = Tile{ .symbol = '#', .color = Pixel.init(255, 255, 0, null), .bck_color = Pixel.init(0, 0, 0, null) };
-    pub const EMPTY: Tile = Tile{ .symbol = ' ', .color = Pixel.init(0, 0, 0, null), .bck_color = Pixel.init(0, 0, 0, null) };
+    pub const FLOOR: Tile = Tile{ .symbol = '.', .color = Pixel.init(0, 255, 0, null), .bck_color = BLACK };
+    pub const WALL: Tile = Tile{ .symbol = '#', .color = Pixel.init(255, 0, 0, null), .bck_color = BLACK };
+    pub const VERT_FLOOR: Tile = Tile{ .symbol = '.', .color = Pixel.init(0, 0, 255, null), .bck_color = BLACK };
+    pub const VERT_WALL: Tile = Tile{ .symbol = '#', .color = Pixel.init(0, 0, 255, null), .bck_color = BLACK };
+    pub const HOR_FLOOR: Tile = Tile{ .symbol = '.', .color = Pixel.init(255, 255, 0, null), .bck_color = BLACK };
+    pub const HOR_WALL: Tile = Tile{ .symbol = '#', .color = Pixel.init(255, 255, 0, null), .bck_color = BLACK };
+    pub const EMPTY: Tile = Tile{ .symbol = ' ', .color = BLACK, .bck_color = Pixel.init(0, 0, 0, null) };
+    pub const START: Tile = Tile{ .symbol = '*', .color = Pixel.init(0, 255, 255, null), .bck_color = BLACK };
+    pub const EXIT: Tile = Tile{ .symbol = '$', .color = Pixel.init(0, 255, 0, null), .bck_color = BLACK };
 };
 
 pub const ForestTiles = struct {
-    pub const FLOOR: Tile = Tile{ .symbol = '.', .color = Pixel.init(0, 255, 0, null), .bck_color = Pixel.init(0, 0, 0, null) };
+    pub const FLOOR: Tile = Tile{ .symbol = '.', .color = Pixel.init(0, 255, 0, null), .bck_color = BLACK };
 };
 
 pub fn Map(comptime map_type: MapType, comptime color_type: ColorMode) type {
@@ -104,7 +108,7 @@ pub fn Map(comptime map_type: MapType, comptime color_type: ColorMode) type {
             }
             self.rooms.deinit();
         }
-        pub fn valid_position(self: *Self, x: i32, y: i32) bool {
+        pub fn valid_position(self: *const Self, x: i32, y: i32) bool {
             const x_usize: usize = @intCast(@as(u32, @bitCast(x)));
             const y_usize: usize = @intCast(@as(u32, @bitCast(y)));
             return self.tex.ascii_buffer[y_usize * self.width + x_usize] != TileType.WALL.symbol and self.tex.ascii_buffer[y_usize * self.width + x_usize] != TileType.HOR_WALL.symbol and self.tex.ascii_buffer[y_usize * self.width + x_usize] != TileType.VERT_WALL.symbol;
