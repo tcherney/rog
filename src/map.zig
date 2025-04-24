@@ -27,6 +27,14 @@ pub const Room = struct {
     width: usize = undefined,
     x: usize = undefined,
     y: usize = undefined,
+    //TODO may need record special tiles like start and end
+    start: RoomObject = undefined,
+    exit: RoomObject = undefined,
+    pub const RoomObject = struct {
+        tile: Tile,
+        x: usize,
+        y: usize,
+    };
     pub const Error = error{} || Allocator.Error;
     pub fn init(allocator: Allocator) Room {
         return Room{
@@ -75,7 +83,7 @@ pub const DungeonTiles = struct {
     pub const HOR_WALL: Tile = Tile{ .symbol = '#', .color = Pixel.init(255, 255, 0, null), .bck_color = BLACK };
     pub const EMPTY: Tile = Tile{ .symbol = ' ', .color = BLACK, .bck_color = Pixel.init(0, 0, 0, null) };
     pub const START: Tile = Tile{ .symbol = '*', .color = Pixel.init(0, 255, 255, null), .bck_color = BLACK };
-    pub const EXIT: Tile = Tile{ .symbol = '$', .color = Pixel.init(0, 255, 0, null), .bck_color = BLACK };
+    pub const EXIT: Tile = Tile{ .symbol = '$', .color = Pixel.init(255, 0, 255, null), .bck_color = BLACK };
 };
 
 pub const ForestTiles = struct {
@@ -89,6 +97,9 @@ pub fn Map(comptime map_type: MapType, comptime color_type: ColorMode) type {
         width: usize = undefined,
         height: usize = undefined,
         rooms: std.ArrayList(Room),
+        start_room: usize = undefined,
+        exit_room: usize = undefined,
+        //TODO may want reference to start and end rooms
         pub const TileType = switch (map_type) {
             .DUNGEON => DungeonTiles,
             .FOREST => ForestTiles,
@@ -108,6 +119,21 @@ pub fn Map(comptime map_type: MapType, comptime color_type: ColorMode) type {
             }
             self.rooms.deinit();
         }
+        pub fn room_to_map_coord(self: *const Self, room_id: usize, x: usize, y: usize) Point {
+            return .{
+                .x = self.rooms.items[room_id].x + x,
+                .y = self.rooms.items[room_id].y + y,
+            };
+        }
+
+        pub fn start_map_coord(self: *const Self) Point {
+            return self.room_to_map_coord(self.start_room, self.rooms.items[self.start_room].start.x, self.rooms.items[self.start_room].start.y);
+        }
+
+        pub fn exit_map_coord(self: *const Self) Point {
+            return self.room_to_map_coord(self.exit_room, self.rooms.items[self.exit_room].exit.x, self.rooms.items[self.exit_room].exit.y);
+        }
+
         pub fn valid_position(self: *const Self, x: i32, y: i32) bool {
             const x_usize: usize = @intCast(@as(u32, @bitCast(x)));
             const y_usize: usize = @intCast(@as(u32, @bitCast(y)));
@@ -123,7 +149,7 @@ pub fn Map(comptime map_type: MapType, comptime color_type: ColorMode) type {
         }
         //TODO add more parameters
         //TODO add generation
-        pub fn generate(self: *Self, width: usize, height: usize, num_objects: usize) Error!void {
+        pub fn generate(self: *Self, width: usize, height: usize, num_rooms: usize) Error!void {
             self.tex = Texture.init(self.allocator);
             self.tex.is_ascii = true;
             self.width = width;
@@ -137,7 +163,7 @@ pub fn Map(comptime map_type: MapType, comptime color_type: ColorMode) type {
             var cur_object: usize = 0;
             const MAX_ATTEMPTS = 20;
             var attempt: usize = 0;
-            outer: while (cur_object < num_objects) {
+            outer: while (cur_object < num_rooms) {
                 if (attempt >= MAX_ATTEMPTS) break;
                 switch (map_type) {
                     .DUNGEON => {
@@ -190,7 +216,7 @@ pub fn Map(comptime map_type: MapType, comptime color_type: ColorMode) type {
                     var curr_y: usize = r1_center.y;
                     var curr_x: usize = r1_center.x;
                     if (vertical) {
-                        std.debug.print("From room {d} to {d} going veritcal first", .{ k, k + 1 });
+                        std.debug.print("From room {d} to {d} going vertical first", .{ k, k + 1 });
                         if (r2_center.y > r1_center.y) {
                             curr_y = r1.y + r1.height - 1;
                             while (curr_y <= r2_center.y) : (curr_y += 1) {
@@ -278,6 +304,30 @@ pub fn Map(comptime map_type: MapType, comptime color_type: ColorMode) type {
                     }
                 }
             }
+            // place entrance and exit to map
+            const start_room = rand.intRangeAtMost(usize, 0, num_rooms - 1);
+            const start_room_x = rand.intRangeAtMost(usize, 1, self.rooms.items[start_room].width - 2);
+            const start_room_y = rand.intRangeAtMost(usize, 1, self.rooms.items[start_room].height - 2);
+
+            var exit_room = rand.intRangeAtMost(usize, 0, num_rooms - 1);
+            while (exit_room == start_room) exit_room = rand.intRangeAtMost(usize, 0, num_rooms);
+            const exit_room_x = rand.intRangeAtMost(usize, 1, self.rooms.items[exit_room].width - 2);
+            const exit_room_y = rand.intRangeAtMost(usize, 1, self.rooms.items[exit_room].height - 2);
+
+            self.assign_tile(self.rooms.items[start_room].x + start_room_x, self.rooms.items[start_room].y + start_room_y, TileType.START, true);
+            self.assign_tile(self.rooms.items[exit_room].x + exit_room_x, self.rooms.items[exit_room].y + exit_room_y, TileType.EXIT, true);
+            self.rooms.items[start_room].start = .{
+                .tile = TileType.START,
+                .x = start_room_x,
+                .y = start_room_y,
+            };
+            self.rooms.items[exit_room].exit = .{
+                .tile = TileType.EXIT,
+                .x = start_room_x,
+                .y = start_room_y,
+            };
+            self.start_room = start_room;
+            self.exit_room = exit_room;
         }
         pub fn draw(self: *Self, x: i32, y: i32, renderer: *AsciiGraphics(color_type), dest: ?Texture) Error!void {
             try renderer.draw_texture(self.tex, .{ .x = 0, .y = 0, .width = self.tex.width, .height = self.tex.height }, .{ .x = x, .y = y, .width = self.tex.width, .height = self.tex.height }, dest);

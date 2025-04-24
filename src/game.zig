@@ -74,8 +74,9 @@ pub const Game = struct {
         try self.window.rect(@intCast(self.e.renderer.terminal.size.width), @intCast(self.e.renderer.terminal.size.height), 0, 0, 0, 255);
         try self.world.generate(@intCast(self.e.renderer.terminal.size.width), @intCast(self.e.renderer.terminal.size.height / 2), 10);
         self.player = Player(.color_true).init();
-        self.player.x = @intCast(@as(i64, @bitCast(self.world.rooms.items[0].x + self.world.rooms.items[0].width / 2)));
-        self.player.y = @intCast(@as(i64, @bitCast(self.world.rooms.items[0].y + self.world.rooms.items[0].height / 2)));
+        const start_coord = self.world.start_map_coord();
+        self.player.x = @intCast(@as(i64, @bitCast(start_coord.x)));
+        self.player.y = @intCast(@as(i64, @bitCast(start_coord.y)));
         self.e.on_key_down(Self, on_key_down, self);
         self.e.on_render(Self, on_render, self);
         self.e.on_mouse_change(Self, on_mouse_change, self);

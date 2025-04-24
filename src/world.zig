@@ -4,3 +4,4 @@ const common = @import("common");
 const map = @import("map.zig");
 
 //TODO main world struct will house multiple maps
+//TODO when player reaches exit go to next map
