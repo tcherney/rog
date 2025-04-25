@@ -5,7 +5,7 @@ const map = @import("map.zig");
 const player = @import("player.zig");
 
 pub const Engine = engine.Engine;
-pub const DungeonMap = map.Map(.DUNGEON, .color_true);
+pub const DungeonMap = map.Map(.color_true);
 const GAME_LOG = std.log.scoped(.game);
 pub const Player = player.Player;
 
@@ -23,7 +23,7 @@ pub const Game = struct {
     pub fn init(allocator: std.mem.Allocator) Error!Self {
         return Self{
             .allocator = allocator,
-            .world = DungeonMap.init(allocator),
+            .world = DungeonMap.init(allocator, .DUNGEON),
             .window = engine.Texture.init(allocator),
         };
     }

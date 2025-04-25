@@ -19,7 +19,7 @@ pub const Tile = struct {
     color: Pixel,
     bck_color: Pixel,
 };
-
+//TODO will likely want to track the map id taking an exit should go to so we can build a dungeon configured of multiple maps
 pub const Room = struct {
     tiles: []Tile = undefined,
     allocator: Allocator,
@@ -73,7 +73,7 @@ pub const Room = struct {
 };
 
 pub const BLACK = Pixel.init(0, 0, 0, 255);
-
+//TODO may want to change how we do this to make it less cumbersome
 pub const DungeonTiles = struct {
     pub const FLOOR: Tile = Tile{ .symbol = '.', .color = Pixel.init(0, 255, 0, null), .bck_color = BLACK };
     pub const WALL: Tile = Tile{ .symbol = '#', .color = Pixel.init(255, 0, 0, null), .bck_color = BLACK };
@@ -88,9 +88,10 @@ pub const DungeonTiles = struct {
 
 pub const ForestTiles = struct {
     pub const FLOOR: Tile = Tile{ .symbol = '.', .color = Pixel.init(0, 255, 0, null), .bck_color = BLACK };
+    pub const EMPTY: Tile = Tile{ .symbol = ' ', .color = BLACK, .bck_color = Pixel.init(0, 0, 0, null) };
 };
 
-pub fn Map(comptime map_type: MapType, comptime color_type: ColorMode) type {
+pub fn Map(comptime color_type: ColorMode) type {
     return struct {
         allocator: Allocator,
         tex: Texture = undefined,
@@ -99,16 +100,14 @@ pub fn Map(comptime map_type: MapType, comptime color_type: ColorMode) type {
         rooms: std.ArrayList(Room),
         start_room: usize = undefined,
         exit_room: usize = undefined,
-        //TODO may want reference to start and end rooms
-        pub const TileType = switch (map_type) {
-            .DUNGEON => DungeonTiles,
-            .FOREST => ForestTiles,
-        };
+        map_type: MapType = undefined,
+
         const Self = @This();
         pub const Error = error{} || engine.ascii_graphics.Error || Texture.Error;
-        pub fn init(allocator: Allocator) Self {
+        pub fn init(allocator: Allocator, map_type: MapType) Self {
             return Self{
                 .allocator = allocator,
+                .map_type = map_type,
                 .rooms = std.ArrayList(Room).init(allocator),
             };
         }
@@ -134,12 +133,21 @@ pub fn Map(comptime map_type: MapType, comptime color_type: ColorMode) type {
             return self.room_to_map_coord(self.exit_room, self.rooms.items[self.exit_room].exit.x, self.rooms.items[self.exit_room].exit.y);
         }
 
-        pub fn valid_position(self: *const Self, x: i32, y: i32) bool {
+        fn _valid_position(self: *const Self, x: i32, y: i32, TileType: type) bool {
+            if (TileType == ForestTiles) unreachable;
             const x_usize: usize = @intCast(@as(u32, @bitCast(x)));
             const y_usize: usize = @intCast(@as(u32, @bitCast(y)));
             return self.tex.ascii_buffer[y_usize * self.width + x_usize] != TileType.WALL.symbol and self.tex.ascii_buffer[y_usize * self.width + x_usize] != TileType.HOR_WALL.symbol and self.tex.ascii_buffer[y_usize * self.width + x_usize] != TileType.VERT_WALL.symbol;
         }
-        pub fn assign_tile(self: *Self, x: usize, y: usize, tile: Tile, overwrite: bool) void {
+
+        pub fn valid_position(self: *const Self, x: i32, y: i32) bool {
+            switch (self.map_type) {
+                .DUNGEON => return self._valid_position(x, y, DungeonTiles),
+                .FOREST => return self._valid_position(x, y, ForestTiles),
+            }
+        }
+
+        fn _assign_tile(self: *Self, x: usize, y: usize, tile: Tile, overwrite: bool, TileType: type) void {
             if (!overwrite) {
                 if (self.tex.ascii_buffer[y * self.width + x] == TileType.FLOOR.symbol) return;
             }
@@ -147,9 +155,16 @@ pub fn Map(comptime map_type: MapType, comptime color_type: ColorMode) type {
             self.tex.background_pixel_buffer[y * self.width + x] = tile.bck_color;
             self.tex.pixel_buffer[y * self.width + x] = tile.color;
         }
+
+        pub fn assign_tile(self: *Self, x: usize, y: usize, tile: Tile, overwrite: bool) void {
+            switch (self.map_type) {
+                .DUNGEON => self._assign_tile(x, y, tile, overwrite, DungeonTiles),
+                .FOREST => self._assign_tile(x, y, tile, overwrite, ForestTiles),
+            }
+        }
         //TODO add more parameters
         //TODO add generation
-        pub fn generate(self: *Self, width: usize, height: usize, num_rooms: usize) Error!void {
+        fn _generate(self: *Self, width: usize, height: usize, num_rooms: usize, TileType: type) Error!void {
             self.tex = Texture.init(self.allocator);
             self.tex.is_ascii = true;
             self.width = width;
@@ -163,9 +178,10 @@ pub fn Map(comptime map_type: MapType, comptime color_type: ColorMode) type {
             var cur_object: usize = 0;
             const MAX_ATTEMPTS = 20;
             var attempt: usize = 0;
+            if (TileType == ForestTiles) unreachable;
             outer: while (cur_object < num_rooms) {
                 if (attempt >= MAX_ATTEMPTS) break;
-                switch (map_type) {
+                switch (self.map_type) {
                     .DUNGEON => {
                         var new_room = Room.init(self.allocator);
                         try new_room.build_room(self.width, self.height, 8);
@@ -328,6 +344,12 @@ pub fn Map(comptime map_type: MapType, comptime color_type: ColorMode) type {
             };
             self.start_room = start_room;
             self.exit_room = exit_room;
+        }
+        pub fn generate(self: *Self, width: usize, height: usize, num_rooms: usize) Error!void {
+            switch (self.map_type) {
+                .DUNGEON => try self._generate(width, height, num_rooms, DungeonTiles),
+                .FOREST => try self._generate(width, height, num_rooms, ForestTiles),
+            }
         }
         pub fn draw(self: *Self, x: i32, y: i32, renderer: *AsciiGraphics(color_type), dest: ?Texture) Error!void {
             try renderer.draw_texture(self.tex, .{ .x = 0, .y = 0, .width = self.tex.width, .height = self.tex.height }, .{ .x = x, .y = y, .width = self.tex.width, .height = self.tex.height }, dest);
