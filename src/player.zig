@@ -28,6 +28,8 @@ pub fn Player(comptime color_type: ColorMode) type {
                 .symbol = '@',
             };
         }
+        //TODO update to check if player is moving into an exit
+        // teleport player to correct room in correct map if that is the case
         pub fn move(self: *Self, move_direction: MoveDirection, map: anytype) void {
             switch (move_direction) {
                 .UP => {

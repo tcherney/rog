@@ -14,6 +14,21 @@ const Rectangle = common.Rectangle;
 const rand = std.crypto.random;
 const Point = common.Point(2, usize);
 
+pub const MapExit = struct {
+    map_indx: usize = undefined,
+    room_info: *Room.RoomObject,
+    room_indx: usize,
+    ext_map_indx: usize = undefined,
+    ext_room_info: *Room.RoomObject = undefined,
+    ext_room_indx: usize = undefined,
+    pub fn connect_rooms(self: *MapExit, other: *MapExit, self_indx: usize, other_indx: usize) void {
+        self.map_indx = self_indx;
+        self.ext_map_indx = other_indx;
+        other.map_indx = other_indx;
+        other.ext_map_indx = self_indx;
+    }
+};
+
 pub const Tile = struct {
     symbol: u8,
     color: Pixel,
@@ -98,8 +113,8 @@ pub fn Map(comptime color_type: ColorMode) type {
         width: usize = undefined,
         height: usize = undefined,
         rooms: std.ArrayList(Room),
-        start_room: usize = undefined,
-        exit_room: usize = undefined,
+        start_room: MapExit = undefined,
+        exit_room: MapExit = undefined,
         map_type: MapType = undefined,
 
         const Self = @This();
@@ -126,11 +141,11 @@ pub fn Map(comptime color_type: ColorMode) type {
         }
 
         pub fn start_map_coord(self: *const Self) Point {
-            return self.room_to_map_coord(self.start_room, self.rooms.items[self.start_room].start.x, self.rooms.items[self.start_room].start.y);
+            return self.room_to_map_coord(self.start_room.room_indx, self.rooms.items[self.start_room.room_indx].start.x, self.rooms.items[self.start_room.room_indx].start.y);
         }
 
         pub fn exit_map_coord(self: *const Self) Point {
-            return self.room_to_map_coord(self.exit_room, self.rooms.items[self.exit_room].exit.x, self.rooms.items[self.exit_room].exit.y);
+            return self.room_to_map_coord(self.exit_room.room_indx, self.rooms.items[self.exit_room.room_indx].exit.x, self.rooms.items[self.exit_room.room_indx].exit.y);
         }
 
         fn _valid_position(self: *const Self, x: i32, y: i32, TileType: type) bool {
@@ -342,8 +357,15 @@ pub fn Map(comptime color_type: ColorMode) type {
                 .x = start_room_x,
                 .y = start_room_y,
             };
-            self.start_room = start_room;
-            self.exit_room = exit_room;
+            self.start_room = .{
+                .room_indx = start_room,
+                .room_info = &self.rooms.items[start_room].start,
+            };
+
+            self.exit_room = .{
+                .room_indx = exit_room,
+                .room_info = &self.rooms.items[exit_room].exit,
+            };
         }
         pub fn generate(self: *Self, width: usize, height: usize, num_rooms: usize) Error!void {
             switch (self.map_type) {
@@ -351,6 +373,7 @@ pub fn Map(comptime color_type: ColorMode) type {
                 .FOREST => try self._generate(width, height, num_rooms, ForestTiles),
             }
         }
+        //TODO should add some way of distinguihing maps such as a visibile name
         pub fn draw(self: *Self, x: i32, y: i32, renderer: *AsciiGraphics(color_type), dest: ?Texture) Error!void {
             try renderer.draw_texture(self.tex, .{ .x = 0, .y = 0, .width = self.tex.width, .height = self.tex.height }, .{ .x = x, .y = y, .width = self.tex.width, .height = self.tex.height }, dest);
         }
