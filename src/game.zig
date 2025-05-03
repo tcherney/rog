@@ -47,14 +47,16 @@ pub const Game = struct {
         GAME_LOG.info("{}\n", .{key});
         if (key == engine.KEYS.KEY_q) {
             self.running = false;
-        } else if (key == engine.KEYS.KEY_w) {
-            self.player.move(.UP, self.world);
+        }
+        //TODO if player moved into a new location verify wether they moved into a tile that moves them somewhere else
+        else if (key == engine.KEYS.KEY_w) {
+            if (self.player.move(.UP, self.world)) {}
         } else if (key == engine.KEYS.KEY_a) {
-            self.player.move(.LEFT, self.world);
+            if (self.player.move(.LEFT, self.world)) {}
         } else if (key == engine.KEYS.KEY_s) {
-            self.player.move(.DOWN, self.world);
+            if (self.player.move(.DOWN, self.world)) {}
         } else if (key == engine.KEYS.KEY_d) {
-            self.player.move(.RIGHT, self.world);
+            if (self.player.move(.RIGHT, self.world)) {}
         }
     }
 

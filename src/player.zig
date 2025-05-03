@@ -30,33 +30,39 @@ pub fn Player(comptime color_type: ColorMode) type {
         }
         //TODO update to check if player is moving into an exit
         // teleport player to correct room in correct map if that is the case
-        pub fn move(self: *Self, move_direction: MoveDirection, map: anytype) void {
+        pub fn move(self: *Self, move_direction: MoveDirection, map: anytype) bool {
+            var result: bool = false;
             switch (move_direction) {
                 .UP => {
                     self.y -= 1;
                     if (!map.valid_position(self.x, self.y)) {
                         self.y += 1;
+                        result = true;
                     }
                 },
                 .DOWN => {
                     self.y += 1;
                     if (!map.valid_position(self.x, self.y)) {
                         self.y -= 1;
+                        result = true;
                     }
                 },
                 .LEFT => {
                     self.x -= 1;
                     if (!map.valid_position(self.x, self.y)) {
                         self.x += 1;
+                        result = true;
                     }
                 },
                 .RIGHT => {
                     self.x += 1;
                     if (!map.valid_position(self.x, self.y)) {
                         self.x -= 1;
+                        result = true;
                     }
                 },
             }
+            return false;
         }
         pub fn draw(self: *Self, renderer: *AsciiGraphics(color_type), dest: ?engine.Texture) void {
             renderer.draw_symbol(self.x, self.y, self.symbol, self.color, dest);
