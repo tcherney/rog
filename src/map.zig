@@ -232,7 +232,6 @@ pub fn Map(comptime color_type: ColorMode) type {
                 }
             }
             for (0..self.rooms.items.len) |k| {
-                //TODO add corridor connecting the rooms
                 if (k < self.rooms.items.len - 1) {
                     //find center of the two rooms
                     const r1 = self.rooms.items[k];

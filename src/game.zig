@@ -3,11 +3,13 @@ const engine = @import("engine");
 const common = @import("common");
 const map = @import("map.zig");
 const player = @import("player.zig");
+const world = @import("world.zig");
 
 pub const Engine = engine.Engine;
 pub const DungeonMap = map.Map(.color_true);
 const GAME_LOG = std.log.scoped(.game);
 pub const Player = player.Player;
+pub const World = world.World(.color_true);
 
 pub const Game = struct {
     running: bool = true,
@@ -15,7 +17,7 @@ pub const Game = struct {
     allocator: std.mem.Allocator = undefined,
     frame_limit: u64 = 16_666_667,
     lock: std.Thread.Mutex = undefined,
-    world: DungeonMap,
+    world: World,
     window: engine.Texture,
     player: Player(.color_true) = undefined,
     const Self = @This();
@@ -23,7 +25,7 @@ pub const Game = struct {
     pub fn init(allocator: std.mem.Allocator) Error!Self {
         return Self{
             .allocator = allocator,
-            .world = DungeonMap.init(allocator, .DUNGEON),
+            .world = World.init(allocator),
             .window = engine.Texture.init(allocator),
         };
     }
@@ -50,13 +52,13 @@ pub const Game = struct {
         }
         //TODO if player moved into a new location verify wether they moved into a tile that moves them somewhere else
         else if (key == engine.KEYS.KEY_w) {
-            if (self.player.move(.UP, self.world)) {}
+            if (self.player.move(.UP, self.world.get_current_map())) {}
         } else if (key == engine.KEYS.KEY_a) {
-            if (self.player.move(.LEFT, self.world)) {}
+            if (self.player.move(.LEFT, self.world.get_current_map())) {}
         } else if (key == engine.KEYS.KEY_s) {
-            if (self.player.move(.DOWN, self.world)) {}
+            if (self.player.move(.DOWN, self.world.get_current_map())) {}
         } else if (key == engine.KEYS.KEY_d) {
-            if (self.player.move(.RIGHT, self.world)) {}
+            if (self.player.move(.RIGHT, self.world.get_current_map())) {}
         }
     }
 
@@ -74,9 +76,9 @@ pub const Game = struct {
         GAME_LOG.info("starting height {d}\n", .{self.e.renderer.terminal.size.height});
         self.window.is_ascii = true;
         try self.window.rect(@intCast(self.e.renderer.terminal.size.width), @intCast(self.e.renderer.terminal.size.height), 0, 0, 0, 255);
-        try self.world.generate(@intCast(self.e.renderer.terminal.size.width), @intCast(self.e.renderer.terminal.size.height / 2), 10);
+        try self.world.generate(@intCast(self.e.renderer.terminal.size.width), @intCast(self.e.renderer.terminal.size.height / 2));
         self.player = Player(.color_true).init();
-        const start_coord = self.world.start_map_coord();
+        const start_coord = self.world.get_current_map().start_map_coord();
         self.player.x = @intCast(@as(i64, @bitCast(start_coord.x)));
         self.player.y = @intCast(@as(i64, @bitCast(start_coord.y)));
         self.e.on_key_down(Self, on_key_down, self);
