@@ -34,7 +34,7 @@ pub const Tile = struct {
     color: Pixel,
     bck_color: Pixel,
 };
-//TODO will likely want to track the map id taking an exit should go to so we can build a dungeon configured of multiple maps
+
 pub const Room = struct {
     tiles: []Tile = undefined,
     allocator: Allocator,
@@ -42,7 +42,6 @@ pub const Room = struct {
     width: usize = undefined,
     x: usize = undefined,
     y: usize = undefined,
-    //TODO may need record special tiles like start and end
     start: RoomObject = undefined,
     exit: RoomObject = undefined,
     pub const RoomObject = struct {
@@ -104,6 +103,8 @@ pub const DungeonTiles = struct {
 pub const ForestTiles = struct {
     pub const FLOOR: Tile = Tile{ .symbol = '.', .color = Pixel.init(0, 255, 0, null), .bck_color = BLACK };
     pub const EMPTY: Tile = Tile{ .symbol = ' ', .color = BLACK, .bck_color = Pixel.init(0, 0, 0, null) };
+    pub const START: Tile = Tile{ .symbol = '*', .color = Pixel.init(0, 255, 255, null), .bck_color = BLACK };
+    pub const EXIT: Tile = Tile{ .symbol = '$', .color = Pixel.init(255, 0, 255, null), .bck_color = BLACK };
 };
 
 pub fn Map(comptime color_type: ColorMode) type {
@@ -159,6 +160,26 @@ pub fn Map(comptime color_type: ColorMode) type {
             switch (self.map_type) {
                 .DUNGEON => return self._valid_position(x, y, DungeonTiles),
                 .FOREST => return self._valid_position(x, y, ForestTiles),
+            }
+        }
+
+        fn _at_tile(self: *const Self, x: i32, y: i32, symbol: u8) bool {
+            const x_usize: usize = @intCast(@as(u32, @bitCast(x)));
+            const y_usize: usize = @intCast(@as(u32, @bitCast(y)));
+            return self.tex.ascii_buffer[y_usize * self.width + x_usize] == symbol;
+        }
+
+        pub fn at_exit(self: *const Self, x: i32, y: i32) bool {
+            switch (self.map_type) {
+                .DUNGEON => return self._at_tile(x, y, DungeonTiles.EXIT.symbol),
+                .FOREST => return self._at_tile(x, y, ForestTiles.EXIT.symbol),
+            }
+        }
+
+        pub fn at_start(self: *const Self, x: i32, y: i32) bool {
+            switch (self.map_type) {
+                .DUNGEON => return self._at_tile(x, y, DungeonTiles.START.symbol),
+                .FOREST => return self._at_tile(x, y, ForestTiles.START.symbol),
             }
         }
 
@@ -340,7 +361,7 @@ pub fn Map(comptime color_type: ColorMode) type {
             const start_room_y = rand.intRangeAtMost(usize, 1, self.rooms.items[start_room].height - 2);
 
             var exit_room = rand.intRangeAtMost(usize, 0, num_rooms - 1);
-            while (exit_room == start_room) exit_room = rand.intRangeAtMost(usize, 0, num_rooms);
+            while (exit_room == start_room) exit_room = rand.intRangeAtMost(usize, 0, num_rooms - 1);
             const exit_room_x = rand.intRangeAtMost(usize, 1, self.rooms.items[exit_room].width - 2);
             const exit_room_y = rand.intRangeAtMost(usize, 1, self.rooms.items[exit_room].height - 2);
 
@@ -353,8 +374,8 @@ pub fn Map(comptime color_type: ColorMode) type {
             };
             self.rooms.items[exit_room].exit = .{
                 .tile = TileType.EXIT,
-                .x = start_room_x,
-                .y = start_room_y,
+                .x = exit_room_x,
+                .y = exit_room_y,
             };
             self.start_room = .{
                 .room_indx = start_room,
@@ -372,7 +393,7 @@ pub fn Map(comptime color_type: ColorMode) type {
                 .FOREST => try self._generate(width, height, num_rooms, ForestTiles),
             }
         }
-        //TODO should add some way of distinguihing maps such as a visibile name
+
         pub fn draw(self: *Self, x: i32, y: i32, renderer: *AsciiGraphics(color_type), dest: ?Texture) Error!void {
             try renderer.draw_texture(self.tex, .{ .x = 0, .y = 0, .width = self.tex.width, .height = self.tex.height }, .{ .x = x, .y = y, .width = self.tex.width, .height = self.tex.height }, dest);
         }

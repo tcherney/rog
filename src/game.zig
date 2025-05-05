@@ -5,21 +5,22 @@ const map = @import("map.zig");
 const player = @import("player.zig");
 const world = @import("world.zig");
 
+pub const COLOR_TYPE = .color_true;
 pub const Engine = engine.Engine;
-pub const DungeonMap = map.Map(.color_true);
+pub const DungeonMap = map.Map(COLOR_TYPE);
 const GAME_LOG = std.log.scoped(.game);
 pub const Player = player.Player;
-pub const World = world.World(.color_true);
+pub const World = world.World(COLOR_TYPE);
 
 pub const Game = struct {
     running: bool = true,
-    e: Engine(.ascii, .color_true) = undefined,
+    e: Engine(.ascii, COLOR_TYPE) = undefined,
     allocator: std.mem.Allocator = undefined,
     frame_limit: u64 = 16_666_667,
     lock: std.Thread.Mutex = undefined,
     world: World,
     window: engine.Texture,
-    player: Player(.color_true) = undefined,
+    player: Player(COLOR_TYPE) = undefined,
     const Self = @This();
     pub const Error = error{} || engine.Error || std.posix.GetRandomError || std.mem.Allocator.Error;
     pub fn init(allocator: std.mem.Allocator) Error!Self {
@@ -49,16 +50,22 @@ pub const Game = struct {
         GAME_LOG.info("{}\n", .{key});
         if (key == engine.KEYS.KEY_q) {
             self.running = false;
-        }
-        //TODO if player moved into a new location verify wether they moved into a tile that moves them somewhere else
-        else if (key == engine.KEYS.KEY_w) {
-            if (self.player.move(.UP, self.world.get_current_map())) {}
+        } else if (key == engine.KEYS.KEY_w) {
+            if (self.player.move(.UP, self.world.get_current_map())) {
+                self.world.validate_player_position(&self.player);
+            }
         } else if (key == engine.KEYS.KEY_a) {
-            if (self.player.move(.LEFT, self.world.get_current_map())) {}
+            if (self.player.move(.LEFT, self.world.get_current_map())) {
+                self.world.validate_player_position(&self.player);
+            }
         } else if (key == engine.KEYS.KEY_s) {
-            if (self.player.move(.DOWN, self.world.get_current_map())) {}
+            if (self.player.move(.DOWN, self.world.get_current_map())) {
+                self.world.validate_player_position(&self.player);
+            }
         } else if (key == engine.KEYS.KEY_d) {
-            if (self.player.move(.RIGHT, self.world.get_current_map())) {}
+            if (self.player.move(.RIGHT, self.world.get_current_map())) {
+                self.world.validate_player_position(&self.player);
+            }
         }
     }
 
@@ -72,12 +79,12 @@ pub const Game = struct {
     }
     pub fn run(self: *Self) !void {
         self.lock = std.Thread.Mutex{};
-        self.e = try Engine(.ascii, .color_true).init(self.allocator);
+        self.e = try Engine(.ascii, COLOR_TYPE).init(self.allocator);
         GAME_LOG.info("starting height {d}\n", .{self.e.renderer.terminal.size.height});
         self.window.is_ascii = true;
         try self.window.rect(@intCast(self.e.renderer.terminal.size.width), @intCast(self.e.renderer.terminal.size.height), 0, 0, 0, 255);
         try self.world.generate(@intCast(self.e.renderer.terminal.size.width), @intCast(self.e.renderer.terminal.size.height / 2));
-        self.player = Player(.color_true).init();
+        self.player = Player(COLOR_TYPE).init();
         const start_coord = self.world.get_current_map().start_map_coord();
         self.player.x = @intCast(@as(i64, @bitCast(start_coord.x)));
         self.player.y = @intCast(@as(i64, @bitCast(start_coord.y)));
