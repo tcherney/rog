@@ -9,7 +9,9 @@ const Allocator = std.mem.Allocator;
 const AsciiGraphics = engine.AsciiGraphics;
 const MapExit = map.MapExit;
 const Texture = engine.Texture;
+const Pixel = common.Pixel;
 pub var scratch_buffer: [32]u8 = undefined;
+const MAP_NAME = "Floor";
 pub fn World(comptime color_type: ColorMode) type {
     return struct {
         allocator: Allocator,
@@ -91,8 +93,25 @@ pub fn World(comptime color_type: ColorMode) type {
             }
         }
         pub fn draw(self: *Self, x: i32, y: i32, renderer: *AsciiGraphics(color_type), dest: ?Texture) Error!void {
-            //TODO draw dungeon name in center include floor name
-            try renderer.draw_texture(self.get_current_map().tex, .{ .x = 0, .y = 0, .width = self.get_current_map().tex.width, .height = self.get_current_map().tex.height }, .{ .x = x, .y = y, .width = self.get_current_map().tex.width, .height = self.get_current_map().tex.height }, dest);
+            const current_map = self.get_current_map();
+            try renderer.draw_texture(current_map.tex, .{ .x = 0, .y = 0, .width = current_map.tex.width, .height = current_map.tex.height }, .{ .x = x, .y = y, .width = current_map.tex.width, .height = current_map.tex.height }, dest);
+            const window_center = renderer.terminal.size.width / 2;
+            const name_center = self.dungeons[self.current_dungeon].name.len / 2;
+            const name_offset = window_center - name_center;
+            const text_color = Pixel.init(255, 255, 255, null);
+            for (0..self.dungeons[self.current_dungeon].name.len) |i| {
+                const x_i32: i32 = @intCast(@as(i64, @bitCast(name_offset + i)));
+                const y_i32: i32 = 0;
+                renderer.draw_symbol(x_i32, y_i32, self.dungeons[self.current_dungeon].name[i], text_color, dest);
+            }
+            const floor_offset = name_offset + self.dungeons[self.current_dungeon].name.len + 1;
+            for (0..MAP_NAME.len) |i| {
+                const x_i32: i32 = @intCast(@as(i64, @bitCast(floor_offset + i)));
+                const y_i32: i32 = 0;
+                renderer.draw_symbol(x_i32, y_i32, MAP_NAME[i], text_color, dest);
+            }
+            const x_i32: i32 = @intCast(@as(i64, @bitCast(floor_offset + MAP_NAME.len + 1)));
+            renderer.draw_symbol(x_i32, 0, 48 + @as(u8, @intCast(self.dungeons[self.current_dungeon].current_map)), text_color, dest);
         }
 
         pub fn validate_player_position(self: *Self, p: *Player) void {
