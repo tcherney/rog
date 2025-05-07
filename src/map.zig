@@ -13,6 +13,7 @@ const Texture = engine.Texture;
 const Rectangle = common.Rectangle;
 const rand = std.crypto.random;
 const Point = common.Point(2, usize);
+const TEXT_COLOR = Pixel.init(255, 255, 255, null);
 
 pub const MapExit = struct {
     map_indx: usize = undefined,
@@ -117,6 +118,7 @@ pub fn Map(comptime color_type: ColorMode) type {
         start_room: MapExit = undefined,
         exit_room: MapExit = undefined,
         map_type: MapType = undefined,
+        name: []u8 = undefined,
 
         const Self = @This();
         pub const Error = error{} || engine.ascii_graphics.Error || Texture.Error;
@@ -133,6 +135,7 @@ pub fn Map(comptime color_type: ColorMode) type {
                 self.rooms.items[i].deinit();
             }
             self.rooms.deinit();
+            self.allocator.free(self.name);
         }
         pub fn room_to_map_coord(self: *const Self, room_id: usize, x: usize, y: usize) Point {
             return .{
@@ -387,15 +390,21 @@ pub fn Map(comptime color_type: ColorMode) type {
                 .room_info = &self.rooms.items[exit_room].exit,
             };
         }
-        pub fn generate(self: *Self, width: usize, height: usize, num_rooms: usize) Error!void {
+        pub fn generate(self: *Self, width: usize, height: usize, num_rooms: usize, name: []const u8) Error!void {
+            self.name = try self.allocator.dupe(u8, name);
             switch (self.map_type) {
                 .DUNGEON => try self._generate(width, height, num_rooms, DungeonTiles),
                 .FOREST => try self._generate(width, height, num_rooms, ForestTiles),
             }
         }
 
-        pub fn draw(self: *Self, x: i32, y: i32, renderer: *AsciiGraphics(color_type), dest: ?Texture) Error!void {
+        pub fn draw(self: *Self, x: i32, y: i32, name_offset: usize, renderer: *AsciiGraphics(color_type), dest: ?Texture) Error!void {
             try renderer.draw_texture(self.tex, .{ .x = 0, .y = 0, .width = self.tex.width, .height = self.tex.height }, .{ .x = x, .y = y, .width = self.tex.width, .height = self.tex.height }, dest);
+            for (0..self.name.len) |i| {
+                const x_i32: i32 = @intCast(@as(i64, @bitCast(name_offset + i)));
+                const y_i32: i32 = 0;
+                renderer.draw_symbol(x_i32, y_i32, self.name[i], TEXT_COLOR, dest);
+            }
         }
     };
 }
