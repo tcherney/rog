@@ -12,12 +12,13 @@ const Texture = engine.Texture;
 const Pixel = common.Pixel;
 pub var scratch_buffer: [32]u8 = undefined;
 //TODO move out to a constants/config file
-const TEXT_COLOR = Pixel.init(255, 255, 255, null);
+const TEXT_COLOR = common.Colors.WHITE;
 
 pub fn World(comptime color_type: ColorMode) type {
     return struct {
         allocator: Allocator,
         dungeons: []Dungeon = undefined,
+        overworld: Dungeon = undefined,
         current_dungeon: usize = 0,
         pub const Map = map.Map(color_type);
         pub const Error = error{} || Allocator.Error || Map.Error || std.fmt.BufPrintError;
@@ -107,6 +108,9 @@ pub fn World(comptime color_type: ColorMode) type {
                 //TODO will have to think about this better, we currently would need an index to the proper dungeon as well, for now we will just assume its the next one in the list
                 self.dungeons[i].entrance.connect_rooms(&self.dungeons[i - 1].exit, i, i - 1);
             }
+            self.overworld = Dungeon.init(self.allocator);
+            //TODO generate overworld
+            //TODO connect dungeons to overworld
         }
 
         pub fn draw(self: *Self, x: i32, y: i32, renderer: *AsciiGraphics(color_type), dest: ?Texture) Error!void {

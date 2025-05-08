@@ -13,7 +13,8 @@ const Texture = engine.Texture;
 const Rectangle = common.Rectangle;
 const rand = std.crypto.random;
 const Point = common.Point(2, usize);
-const TEXT_COLOR = Pixel.init(255, 255, 255, null);
+const Colors = common.Colors;
+const TEXT_COLOR = Colors.WHITE;
 
 pub const MapExit = struct {
     map_indx: usize = undefined,
@@ -87,25 +88,24 @@ pub const Room = struct {
     }
 };
 
-pub const BLACK = Pixel.init(0, 0, 0, 255);
 //TODO may want to change how we do this to make it less cumbersome
 pub const DungeonTiles = struct {
-    pub const FLOOR: Tile = Tile{ .symbol = '.', .color = Pixel.init(0, 255, 0, null), .bck_color = BLACK };
-    pub const WALL: Tile = Tile{ .symbol = '#', .color = Pixel.init(255, 0, 0, null), .bck_color = BLACK };
-    pub const VERT_FLOOR: Tile = Tile{ .symbol = '.', .color = Pixel.init(0, 0, 255, null), .bck_color = BLACK };
-    pub const VERT_WALL: Tile = Tile{ .symbol = '#', .color = Pixel.init(0, 0, 255, null), .bck_color = BLACK };
-    pub const HOR_FLOOR: Tile = Tile{ .symbol = '.', .color = Pixel.init(255, 255, 0, null), .bck_color = BLACK };
-    pub const HOR_WALL: Tile = Tile{ .symbol = '#', .color = Pixel.init(255, 255, 0, null), .bck_color = BLACK };
-    pub const EMPTY: Tile = Tile{ .symbol = ' ', .color = BLACK, .bck_color = Pixel.init(0, 0, 0, null) };
-    pub const START: Tile = Tile{ .symbol = '*', .color = Pixel.init(0, 255, 255, null), .bck_color = BLACK };
-    pub const EXIT: Tile = Tile{ .symbol = '$', .color = Pixel.init(255, 0, 255, null), .bck_color = BLACK };
+    pub const FLOOR: Tile = Tile{ .symbol = '.', .color = Colors.GREEN, .bck_color = Colors.BLACK };
+    pub const WALL: Tile = Tile{ .symbol = '#', .color = Colors.RED, .bck_color = Colors.BLACK };
+    pub const VERT_FLOOR: Tile = Tile{ .symbol = '.', .color = Colors.BLUE, .bck_color = Colors.BLACK };
+    pub const VERT_WALL: Tile = Tile{ .symbol = '#', .color = Colors.BLUE, .bck_color = Colors.BLACK };
+    pub const HOR_FLOOR: Tile = Tile{ .symbol = '.', .color = Colors.YELLOW, .bck_color = Colors.BLACK };
+    pub const HOR_WALL: Tile = Tile{ .symbol = '#', .color = Colors.YELLOW, .bck_color = Colors.BLACK };
+    pub const EMPTY: Tile = Tile{ .symbol = ' ', .color = Colors.BLACK, .bck_color = Colors.BLACK };
+    pub const START: Tile = Tile{ .symbol = '*', .color = Colors.CYAN, .bck_color = Colors.BLACK };
+    pub const EXIT: Tile = Tile{ .symbol = '$', .color = Colors.MAGENTA, .bck_color = Colors.BLACK };
 };
 
 pub const ForestTiles = struct {
-    pub const FLOOR: Tile = Tile{ .symbol = '.', .color = Pixel.init(0, 255, 0, null), .bck_color = BLACK };
-    pub const EMPTY: Tile = Tile{ .symbol = ' ', .color = BLACK, .bck_color = Pixel.init(0, 0, 0, null) };
-    pub const START: Tile = Tile{ .symbol = '*', .color = Pixel.init(0, 255, 255, null), .bck_color = BLACK };
-    pub const EXIT: Tile = Tile{ .symbol = '$', .color = Pixel.init(255, 0, 255, null), .bck_color = BLACK };
+    pub const FLOOR: Tile = Tile{ .symbol = '.', .color = Colors.GREEN, .bck_color = Colors.BLACK };
+    pub const EMPTY: Tile = Tile{ .symbol = ' ', .color = Colors.BLACK, .bck_color = Colors.BLACK };
+    pub const START: Tile = Tile{ .symbol = '*', .color = Colors.CYAN, .bck_color = Colors.BLACK };
+    pub const EXIT: Tile = Tile{ .symbol = '$', .color = Colors.MAGENTA, .bck_color = Colors.BLACK };
 };
 
 pub fn Map(comptime color_type: ColorMode) type {
@@ -217,6 +217,8 @@ pub fn Map(comptime color_type: ColorMode) type {
             var cur_object: usize = 0;
             const MAX_ATTEMPTS = 20;
             var attempt: usize = 0;
+            //TODO generate forest, probably break down world into patches that are connected with roads, and fill surrounding area with grass/trees
+            //TODO will need to figure out how we want to break down the map, might just be a full grid and overwrite areas with connecting roads
             if (TileType == ForestTiles) unreachable;
             outer: while (cur_object < num_rooms) {
                 if (attempt >= MAX_ATTEMPTS) break;

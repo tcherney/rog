@@ -24,7 +24,7 @@ pub fn Player(comptime color_type: ColorMode) type {
             return .{
                 .x = 0,
                 .y = 0,
-                .color = common.Pixel.init(255, 0, 255, null),
+                .color = common.Colors.MAGENTA,
                 .symbol = '@',
             };
         }
