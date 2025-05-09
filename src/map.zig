@@ -18,12 +18,12 @@ const TEXT_COLOR = Colors.WHITE;
 
 pub const MapExit = struct {
     map_indx: usize = undefined,
-    room_info: *Room.RoomObject,
-    room_indx: usize,
+    chunk_info: *MapChunk.MapTile,
+    chunk_indx: usize,
     ext_map_indx: usize = undefined,
-    ext_room_info: *Room.RoomObject = undefined,
-    ext_room_indx: usize = undefined,
-    pub fn connect_rooms(self: *MapExit, other: *MapExit, self_indx: usize, other_indx: usize) void {
+    ext_chunk_info: *MapChunk.MapTile = undefined,
+    ext_chunk_indx: usize = undefined,
+    pub fn connect_chunks(self: *MapExit, other: *MapExit, self_indx: usize, other_indx: usize) void {
         self.map_indx = self_indx;
         self.ext_map_indx = other_indx;
         other.map_indx = other_indx;
@@ -37,30 +37,31 @@ pub const Tile = struct {
     bck_color: Pixel,
 };
 
-pub const Room = struct {
+pub const MapChunk = struct {
     tiles: []Tile = undefined,
     allocator: Allocator,
     height: usize = undefined,
     width: usize = undefined,
     x: usize = undefined,
     y: usize = undefined,
-    start: RoomObject = undefined,
-    exit: RoomObject = undefined,
-    pub const RoomObject = struct {
+    start: MapTile = undefined,
+    exit: MapTile = undefined,
+    pub const MapTile = struct {
         tile: Tile,
         x: usize,
         y: usize,
     };
     pub const Error = error{} || Allocator.Error;
-    pub fn init(allocator: Allocator) Room {
-        return Room{
+    pub fn init(allocator: Allocator) MapChunk {
+        return MapChunk{
             .allocator = allocator,
         };
     }
-    pub fn deinit(self: *Room) void {
+    pub fn deinit(self: *MapChunk) void {
         self.allocator.free(self.tiles);
     }
-    pub fn build_room(self: *Room, map_width: usize, map_height: usize, size: usize) Error!void {
+    //TODO add methods for different type of chunks
+    pub fn build_map_chunk(self: *MapChunk, map_width: usize, map_height: usize, size: usize) Error!void {
         const lower_bounds = @max(4, size);
         self.width = rand.intRangeAtMost(usize, 3, lower_bounds);
         self.height = rand.intRangeAtMost(usize, 3, lower_bounds);
@@ -79,11 +80,11 @@ pub const Room = struct {
         }
     }
 
-    pub fn has_conflict(self: *Room, other: *Room) bool {
+    pub fn has_conflict(self: *MapChunk, other: *MapChunk) bool {
         return self.x + self.width >= other.x and self.x <= other.x + other.width and self.y + self.height >= other.y and self.y <= other.y + other.height;
     }
 
-    pub fn contains_point(self: *const Room, p: Point) bool {
+    pub fn contains_point(self: *const MapChunk, p: Point) bool {
         return p.x >= self.x and p.x <= self.x + self.width and p.y >= self.y and p.y <= self.y + self.height;
     }
 };
@@ -114,9 +115,9 @@ pub fn Map(comptime color_type: ColorMode) type {
         tex: Texture = undefined,
         width: usize = undefined,
         height: usize = undefined,
-        rooms: std.ArrayList(Room),
-        start_room: MapExit = undefined,
-        exit_room: MapExit = undefined,
+        chunks: std.ArrayList(MapChunk),
+        start_chunk: MapExit = undefined,
+        exit_chunk: MapExit = undefined,
         map_type: MapType = undefined,
         name: []u8 = undefined,
 
@@ -126,30 +127,30 @@ pub fn Map(comptime color_type: ColorMode) type {
             return Self{
                 .allocator = allocator,
                 .map_type = map_type,
-                .rooms = std.ArrayList(Room).init(allocator),
+                .chunks = std.ArrayList(MapChunk).init(allocator),
             };
         }
         pub fn deinit(self: *Self) void {
             self.tex.deinit();
-            for (0..self.rooms.items.len) |i| {
-                self.rooms.items[i].deinit();
+            for (0..self.chunks.items.len) |i| {
+                self.chunks.items[i].deinit();
             }
-            self.rooms.deinit();
+            self.chunks.deinit();
             self.allocator.free(self.name);
         }
-        pub fn room_to_map_coord(self: *const Self, room_id: usize, x: usize, y: usize) Point {
+        pub fn chunk_to_map_coord(self: *const Self, chunk_id: usize, x: usize, y: usize) Point {
             return .{
-                .x = self.rooms.items[room_id].x + x,
-                .y = self.rooms.items[room_id].y + y,
+                .x = self.chunks.items[chunk_id].x + x,
+                .y = self.chunks.items[chunk_id].y + y,
             };
         }
 
         pub fn start_map_coord(self: *const Self) Point {
-            return self.room_to_map_coord(self.start_room.room_indx, self.rooms.items[self.start_room.room_indx].start.x, self.rooms.items[self.start_room.room_indx].start.y);
+            return self.chunk_to_map_coord(self.start_chunk.chunk_indx, self.chunks.items[self.start_chunk.chunk_indx].start.x, self.chunks.items[self.start_chunk.chunk_indx].start.y);
         }
 
         pub fn exit_map_coord(self: *const Self) Point {
-            return self.room_to_map_coord(self.exit_room.room_indx, self.rooms.items[self.exit_room.room_indx].exit.x, self.rooms.items[self.exit_room.room_indx].exit.y);
+            return self.chunk_to_map_coord(self.exit_chunk.chunk_indx, self.chunks.items[self.exit_chunk.chunk_indx].exit.x, self.chunks.items[self.exit_chunk.chunk_indx].exit.y);
         }
 
         fn _valid_position(self: *const Self, x: i32, y: i32, TileType: type) bool {
@@ -224,20 +225,20 @@ pub fn Map(comptime color_type: ColorMode) type {
                 if (attempt >= MAX_ATTEMPTS) break;
                 switch (self.map_type) {
                     .DUNGEON => {
-                        var new_room = Room.init(self.allocator);
-                        try new_room.build_room(self.width, self.height, 8);
-                        if (self.rooms.items.len == 0) {
-                            try self.rooms.append(new_room);
+                        var new_room = MapChunk.init(self.allocator);
+                        try new_room.build_map_chunk(self.width, self.height, 8);
+                        if (self.chunks.items.len == 0) {
+                            try self.chunks.append(new_room);
                             cur_object += 1;
                         } else {
-                            for (0..self.rooms.items.len) |i| {
-                                if (self.rooms.items[i].has_conflict(&new_room)) {
+                            for (0..self.chunks.items.len) |i| {
+                                if (self.chunks.items[i].has_conflict(&new_room)) {
                                     attempt += 1;
                                     new_room.deinit();
                                     continue :outer;
                                 }
                             }
-                            try self.rooms.append(new_room);
+                            try self.chunks.append(new_room);
                             cur_object += 1;
                             attempt = 0;
                         }
@@ -247,8 +248,8 @@ pub fn Map(comptime color_type: ColorMode) type {
                     },
                 }
             }
-            for (0..self.rooms.items.len) |k| {
-                const room = self.rooms.items[k];
+            for (0..self.chunks.items.len) |k| {
+                const room = self.chunks.items[k];
                 var indx: usize = 0;
                 for (room.y..room.y + room.height) |i| {
                     for (room.x..room.x + room.width) |j| {
@@ -257,11 +258,11 @@ pub fn Map(comptime color_type: ColorMode) type {
                     }
                 }
             }
-            for (0..self.rooms.items.len) |k| {
-                if (k < self.rooms.items.len - 1) {
+            for (0..self.chunks.items.len) |k| {
+                if (k < self.chunks.items.len - 1) {
                     //find center of the two rooms
-                    const r1 = self.rooms.items[k];
-                    const r2 = self.rooms.items[k + 1];
+                    const r1 = self.chunks.items[k];
+                    const r2 = self.chunks.items[k + 1];
                     const r1_center: Point = .{ .x = r1.x + r1.width / 2, .y = r1.y + r1.height / 2 };
                     const r2_center: Point = .{ .x = r2.x + r2.width / 2, .y = r2.y + r2.height / 2 };
                     self.tex.ascii_buffer[r1_center.y * self.width + r1_center.x] = @intCast(48 + k);
@@ -362,34 +363,34 @@ pub fn Map(comptime color_type: ColorMode) type {
             }
             // place entrance and exit to map
             const start_room = rand.intRangeAtMost(usize, 0, num_rooms - 1);
-            const start_room_x = rand.intRangeAtMost(usize, 1, self.rooms.items[start_room].width - 2);
-            const start_room_y = rand.intRangeAtMost(usize, 1, self.rooms.items[start_room].height - 2);
+            const start_room_x = rand.intRangeAtMost(usize, 1, self.chunks.items[start_room].width - 2);
+            const start_room_y = rand.intRangeAtMost(usize, 1, self.chunks.items[start_room].height - 2);
 
             var exit_room = rand.intRangeAtMost(usize, 0, num_rooms - 1);
             while (exit_room == start_room) exit_room = rand.intRangeAtMost(usize, 0, num_rooms - 1);
-            const exit_room_x = rand.intRangeAtMost(usize, 1, self.rooms.items[exit_room].width - 2);
-            const exit_room_y = rand.intRangeAtMost(usize, 1, self.rooms.items[exit_room].height - 2);
+            const exit_room_x = rand.intRangeAtMost(usize, 1, self.chunks.items[exit_room].width - 2);
+            const exit_room_y = rand.intRangeAtMost(usize, 1, self.chunks.items[exit_room].height - 2);
 
-            self.assign_tile(self.rooms.items[start_room].x + start_room_x, self.rooms.items[start_room].y + start_room_y, TileType.START, true);
-            self.assign_tile(self.rooms.items[exit_room].x + exit_room_x, self.rooms.items[exit_room].y + exit_room_y, TileType.EXIT, true);
-            self.rooms.items[start_room].start = .{
+            self.assign_tile(self.chunks.items[start_room].x + start_room_x, self.chunks.items[start_room].y + start_room_y, TileType.START, true);
+            self.assign_tile(self.chunks.items[exit_room].x + exit_room_x, self.chunks.items[exit_room].y + exit_room_y, TileType.EXIT, true);
+            self.chunks.items[start_room].start = .{
                 .tile = TileType.START,
                 .x = start_room_x,
                 .y = start_room_y,
             };
-            self.rooms.items[exit_room].exit = .{
+            self.chunks.items[exit_room].exit = .{
                 .tile = TileType.EXIT,
                 .x = exit_room_x,
                 .y = exit_room_y,
             };
-            self.start_room = .{
-                .room_indx = start_room,
-                .room_info = &self.rooms.items[start_room].start,
+            self.start_chunk = .{
+                .chunk_indx = start_room,
+                .chunk_info = &self.chunks.items[start_room].start,
             };
 
-            self.exit_room = .{
-                .room_indx = exit_room,
-                .room_info = &self.rooms.items[exit_room].exit,
+            self.exit_chunk = .{
+                .chunk_indx = exit_room,
+                .chunk_info = &self.chunks.items[exit_room].exit,
             };
         }
         pub fn generate(self: *Self, width: usize, height: usize, num_rooms: usize, name: []const u8) Error!void {

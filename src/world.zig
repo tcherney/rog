@@ -53,10 +53,10 @@ pub fn World(comptime color_type: ColorMode) type {
                 }
                 //connect maps together
                 for (1..self.maps.len) |i| {
-                    self.maps[i].start_room.connect_rooms(&self.maps[i - 1].exit_room, i, i - 1);
+                    self.maps[i].start_chunk.connect_chunks(&self.maps[i - 1].exit_chunk, i, i - 1);
                 }
-                self.entrance = self.maps[0].start_room;
-                self.exit = self.maps[n_maps - 1].exit_room;
+                self.entrance = self.maps[0].start_chunk;
+                self.exit = self.maps[n_maps - 1].exit_chunk;
             }
             pub fn draw(self: *Dungeon, x: i32, y: i32, renderer: *AsciiGraphics(color_type), dest: ?Texture) Error!void {
                 // calc offsets
@@ -106,7 +106,7 @@ pub fn World(comptime color_type: ColorMode) type {
             //TODO utilize entrance and exit to connect the dungeons to other maps, in this case for now just connect the dungeons together
             for (1..self.dungeons.len) |i| {
                 //TODO will have to think about this better, we currently would need an index to the proper dungeon as well, for now we will just assume its the next one in the list
-                self.dungeons[i].entrance.connect_rooms(&self.dungeons[i - 1].exit, i, i - 1);
+                self.dungeons[i].entrance.connect_chunks(&self.dungeons[i - 1].exit, i, i - 1);
             }
             self.overworld = Dungeon.init(self.allocator);
             //TODO generate overworld
