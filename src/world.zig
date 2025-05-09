@@ -17,39 +17,52 @@ const TEXT_COLOR = common.Colors.WHITE;
 pub fn World(comptime color_type: ColorMode) type {
     return struct {
         allocator: Allocator,
-        dungeons: []Dungeon = undefined,
-        overworld: Dungeon = undefined,
-        current_dungeon: usize = 0,
+        map_cols: []MapCollection = undefined,
+        current_map_col: usize = 0,
         pub const Map = map.Map(color_type);
         pub const Error = error{} || Allocator.Error || Map.Error || std.fmt.BufPrintError;
         pub const Self = @This();
         const Player = player.Player(color_type);
-        pub const Dungeon = struct {
+        pub const MapCollection = struct {
             allocator: Allocator,
             maps: []Map = undefined,
             entrance: MapExit = undefined,
             exit: MapExit = undefined,
             name: []u8 = undefined,
             current_map: usize = 0,
-            pub fn init(allocator: Allocator) Dungeon {
+            pub fn init(allocator: Allocator) MapCollection {
                 return .{
                     .allocator = allocator,
                 };
             }
 
-            pub fn deinit(self: *Dungeon) void {
+            pub fn deinit(self: *MapCollection) void {
                 for (0..self.maps.len) |i| {
                     self.maps[i].deinit();
                 }
                 self.allocator.free(self.name);
                 self.allocator.free(self.maps);
             }
-            pub fn generate(self: *Dungeon, width: usize, height: usize, n_rooms: usize, n_maps: usize, name: []const u8) Error!void {
+            pub fn generate_forest(self: *MapCollection, width: usize, height: usize, n_maps: usize, name: []const u8) Error!void {
+                self.maps = try self.allocator.alloc(Map, n_maps);
+                self.name = try self.allocator.dupe(u8, name);
+                for (0..self.maps.len) |i| {
+                    self.maps[i] = Map.init(self.allocator, .FOREST);
+                    try self.maps[i].generate(width, height, try std.fmt.bufPrint(&scratch_buffer, "Floor {d}", .{i}), 0);
+                }
+                // //TODO connect maps together
+                // for (1..self.maps.len) |i| {
+                //     self.maps[i].start_chunk.connect_chunks(&self.maps[i - 1].exit_chunk, i, i - 1);
+                // }
+                // self.entrance = self.maps[0].start_chunk;
+                // self.exit = self.maps[n_maps - 1].exit_chunk;
+            }
+            pub fn generate_dungeon(self: *MapCollection, width: usize, height: usize, n_rooms: usize, n_maps: usize, name: []const u8) Error!void {
                 self.maps = try self.allocator.alloc(Map, n_maps);
                 self.name = try self.allocator.dupe(u8, name);
                 for (0..self.maps.len) |i| {
                     self.maps[i] = Map.init(self.allocator, .DUNGEON);
-                    try self.maps[i].generate(width, height, n_rooms, try std.fmt.bufPrint(&scratch_buffer, "Floor {d}", .{i}));
+                    try self.maps[i].generate(width, height, try std.fmt.bufPrint(&scratch_buffer, "Floor {d}", .{i}), n_rooms);
                 }
                 //connect maps together
                 for (1..self.maps.len) |i| {
@@ -58,7 +71,7 @@ pub fn World(comptime color_type: ColorMode) type {
                 self.entrance = self.maps[0].start_chunk;
                 self.exit = self.maps[n_maps - 1].exit_chunk;
             }
-            pub fn draw(self: *Dungeon, x: i32, y: i32, renderer: *AsciiGraphics(color_type), dest: ?Texture) Error!void {
+            pub fn draw(self: *MapCollection, x: i32, y: i32, renderer: *AsciiGraphics(color_type), dest: ?Texture) Error!void {
                 // calc offsets
                 const window_center = renderer.terminal.size.width / 2;
                 const name_center = self.name.len / 2;
@@ -82,13 +95,13 @@ pub fn World(comptime color_type: ColorMode) type {
         }
 
         pub fn deinit(self: *Self) void {
-            for (0..self.dungeons.len) |i| {
-                self.dungeons[i].deinit();
+            for (0..self.map_cols.len) |i| {
+                self.map_cols[i].deinit();
             }
-            self.allocator.free(self.dungeons);
+            self.allocator.free(self.map_cols);
         }
         pub fn get_current_map(self: *Self) *Map {
-            return &self.dungeons[self.current_dungeon].maps[self.dungeons[self.current_dungeon].current_map];
+            return &self.map_cols[self.current_map_col].maps[self.map_cols[self.current_map_col].current_map];
         }
 
         //TODO figure out params for world generation, perhaps a random seed
@@ -97,64 +110,65 @@ pub fn World(comptime color_type: ColorMode) type {
             const dungeons_to_gen = 3;
             const maps_per_dung = 2;
             const rooms_per_dungeon = 5;
-            self.dungeons = try self.allocator.alloc(Dungeon, dungeons_to_gen);
-            for (0..self.dungeons.len) |i| {
-                self.dungeons[i] = Dungeon.init(self.allocator);
-                try self.dungeons[i].generate(width, height, rooms_per_dungeon, maps_per_dung, try std.fmt.bufPrint(&scratch_buffer, "Dungeon {d}", .{i}));
+            self.map_cols = try self.allocator.alloc(MapCollection, dungeons_to_gen + 1);
+            // overworld is index 0
+            self.map_cols[0] = MapCollection.init(self.allocator);
+            try self.map_cols[0].generate_forest(width, height, 1, "World");
+            for (1..self.map_cols.len) |i| {
+                self.map_cols[i] = MapCollection.init(self.allocator);
+                try self.map_cols[i].generate_dungeon(width, height, rooms_per_dungeon, maps_per_dung, try std.fmt.bufPrint(&scratch_buffer, "Dungeon {d}", .{i}));
             }
             //connect the dungeons
             //TODO utilize entrance and exit to connect the dungeons to other maps, in this case for now just connect the dungeons together
-            for (1..self.dungeons.len) |i| {
+            for (2..self.map_cols.len) |i| {
                 //TODO will have to think about this better, we currently would need an index to the proper dungeon as well, for now we will just assume its the next one in the list
-                self.dungeons[i].entrance.connect_chunks(&self.dungeons[i - 1].exit, i, i - 1);
+                self.map_cols[i].entrance.connect_chunks(&self.map_cols[i - 1].exit, i, i - 1);
             }
-            self.overworld = Dungeon.init(self.allocator);
-            //TODO generate overworld
             //TODO connect dungeons to overworld
         }
 
         pub fn draw(self: *Self, x: i32, y: i32, renderer: *AsciiGraphics(color_type), dest: ?Texture) Error!void {
-            try self.dungeons[self.current_dungeon].draw(x, y, renderer, dest);
+            try self.map_cols[self.current_map_col].draw(x, y, renderer, dest);
         }
 
         pub fn validate_player_position(self: *Self, p: *Player) void {
             const current_map = self.get_current_map();
             if (current_map.at_start(p.x, p.y)) {
                 //move between maps in dungeon
-                if (self.dungeons[self.current_dungeon].current_map > 0) {
+                if (self.map_cols[self.current_map_col].current_map > 0) {
                     std.debug.print("Moving back between maps\n", .{});
-                    self.dungeons[self.current_dungeon].current_map -= 1;
-                    const new_pos = self.dungeons[self.current_dungeon].maps[self.dungeons[self.current_dungeon].current_map].exit_map_coord();
+                    self.map_cols[self.current_map_col].current_map -= 1;
+                    const new_pos = self.map_cols[self.current_map_col].maps[self.map_cols[self.current_map_col].current_map].exit_map_coord();
                     p.x = @intCast(@as(i64, @bitCast(new_pos.x)));
                     p.y = @intCast(@as(i64, @bitCast(new_pos.y)));
                 }
                 // move to another dungeon
                 else {
-                    if (self.current_dungeon > 0) {
+                    if (self.current_map_col > 0) {
                         std.debug.print("Moving back between dungeons\n", .{});
-                        self.current_dungeon -= 1;
-                        self.dungeons[self.current_dungeon].current_map = self.dungeons[self.current_dungeon].maps.len - 1;
-                        const new_pos = self.dungeons[self.current_dungeon].maps[self.dungeons[self.current_dungeon].current_map].exit_map_coord();
+                        self.current_map_col -= 1;
+                        self.map_cols[self.current_map_col].current_map = self.map_cols[self.current_map_col].maps.len - 1;
+                        const new_pos = self.map_cols[self.current_map_col].maps[self.map_cols[self.current_map_col].current_map].exit_map_coord();
                         p.x = @intCast(@as(i64, @bitCast(new_pos.x)));
                         p.y = @intCast(@as(i64, @bitCast(new_pos.y)));
                     }
                 }
             } else if (current_map.at_exit(p.x, p.y)) {
                 //move between maps in dungeon
-                if (self.dungeons[self.current_dungeon].current_map < self.dungeons[self.current_dungeon].maps.len - 1) {
+                if (self.map_cols[self.current_map_col].current_map < self.map_cols[self.current_map_col].maps.len - 1) {
                     std.debug.print("Moving up between maps\n", .{});
-                    self.dungeons[self.current_dungeon].current_map += 1;
-                    const new_pos = self.dungeons[self.current_dungeon].maps[self.dungeons[self.current_dungeon].current_map].start_map_coord();
+                    self.map_cols[self.current_map_col].current_map += 1;
+                    const new_pos = self.map_cols[self.current_map_col].maps[self.map_cols[self.current_map_col].current_map].start_map_coord();
                     p.x = @intCast(@as(i64, @bitCast(new_pos.x)));
                     p.y = @intCast(@as(i64, @bitCast(new_pos.y)));
                 }
                 // move to another dungeon
                 else {
-                    if (self.current_dungeon < self.dungeons.len - 1) {
+                    if (self.current_map_col < self.map_cols.len - 1) {
                         std.debug.print("Moving up between dungeons\n", .{});
-                        self.current_dungeon += 1;
-                        self.dungeons[self.current_dungeon].current_map = 0;
-                        const new_pos = self.dungeons[self.current_dungeon].maps[self.dungeons[self.current_dungeon].current_map].start_map_coord();
+                        self.current_map_col += 1;
+                        self.map_cols[self.current_map_col].current_map = 0;
+                        const new_pos = self.map_cols[self.current_map_col].maps[self.map_cols[self.current_map_col].current_map].start_map_coord();
                         p.x = @intCast(@as(i64, @bitCast(new_pos.x)));
                         p.y = @intCast(@as(i64, @bitCast(new_pos.y)));
                     }

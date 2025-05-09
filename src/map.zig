@@ -61,7 +61,7 @@ pub const MapChunk = struct {
         self.allocator.free(self.tiles);
     }
     //TODO add methods for different type of chunks
-    pub fn build_map_chunk(self: *MapChunk, map_width: usize, map_height: usize, size: usize) Error!void {
+    pub fn build_room(self: *MapChunk, map_width: usize, map_height: usize, size: usize) Error!void {
         const lower_bounds = @max(4, size);
         self.width = rand.intRangeAtMost(usize, 3, lower_bounds);
         self.height = rand.intRangeAtMost(usize, 3, lower_bounds);
@@ -76,6 +76,19 @@ pub const MapChunk = struct {
                 } else {
                     self.tiles[i * self.width + j] = DungeonTiles.FLOOR;
                 }
+            }
+        }
+    }
+    //TODO forest chunk generation
+    pub fn build_forest_chunk(self: *MapChunk, width: usize, height: usize, x: usize, y: usize) Error!void {
+        self.width = width;
+        self.height = height;
+        self.x = x;
+        self.y = y;
+        self.tiles = try self.allocator.alloc(Tile, self.width * self.height);
+        for (0..self.height) |i| {
+            for (0..self.width) |j| {
+                self.tiles[i * self.width + j] = ForestTiles.FLOOR;
             }
         }
     }
@@ -154,10 +167,13 @@ pub fn Map(comptime color_type: ColorMode) type {
         }
 
         fn _valid_position(self: *const Self, x: i32, y: i32, TileType: type) bool {
-            if (TileType == ForestTiles) unreachable;
             const x_usize: usize = @intCast(@as(u32, @bitCast(x)));
             const y_usize: usize = @intCast(@as(u32, @bitCast(y)));
-            return self.tex.ascii_buffer[y_usize * self.width + x_usize] != TileType.WALL.symbol and self.tex.ascii_buffer[y_usize * self.width + x_usize] != TileType.HOR_WALL.symbol and self.tex.ascii_buffer[y_usize * self.width + x_usize] != TileType.VERT_WALL.symbol;
+            if (TileType == ForestTiles) {
+                return self.tex.ascii_buffer[y_usize * self.width + x_usize] == TileType.FLOOR.symbol;
+            } else if (TileType == DungeonTiles) {
+                return self.tex.ascii_buffer[y_usize * self.width + x_usize] != TileType.WALL.symbol and self.tex.ascii_buffer[y_usize * self.width + x_usize] != TileType.HOR_WALL.symbol and self.tex.ascii_buffer[y_usize * self.width + x_usize] != TileType.VERT_WALL.symbol;
+            }
         }
 
         pub fn valid_position(self: *const Self, x: i32, y: i32) bool {
@@ -202,50 +218,92 @@ pub fn Map(comptime color_type: ColorMode) type {
                 .FOREST => self._assign_tile(x, y, tile, overwrite, ForestTiles),
             }
         }
-        //TODO add more parameters
-        //TODO add generation
-        fn _generate(self: *Self, width: usize, height: usize, num_rooms: usize, TileType: type) Error!void {
+
+        fn _generate_forest(self: *Self, width: usize, height: usize) Error!void {
             self.tex = Texture.init(self.allocator);
             self.tex.is_ascii = true;
             self.width = width;
             self.height = height;
             try self.tex.rect(@intCast(width), @intCast(height), 0, 0, 0, 255);
             for (0..self.tex.pixel_buffer.len) |i| {
-                self.tex.pixel_buffer[i] = TileType.EMPTY.color;
-                self.tex.background_pixel_buffer[i] = TileType.EMPTY.bck_color;
-                self.tex.ascii_buffer[i] = TileType.EMPTY.symbol;
+                self.tex.pixel_buffer[i] = ForestTiles.EMPTY.color;
+                self.tex.background_pixel_buffer[i] = ForestTiles.EMPTY.bck_color;
+                self.tex.ascii_buffer[i] = ForestTiles.EMPTY.symbol;
+            }
+            var lower_bounds_width: usize = 6;
+            var lower_bounds_height: usize = 4;
+            while (lower_bounds_width % self.width != 0) lower_bounds_width += 1;
+            while (lower_bounds_height % self.height != 0) lower_bounds_height += 1;
+            const chunk_width = self.width / lower_bounds_width;
+            const chunk_height = self.width / lower_bounds_width;
+            const num_chunks = chunk_width * chunk_height;
+            for (0..num_chunks) |i| {
+                var new_chunk = MapChunk.init(self.allocator);
+                const x = (i % chunk_width) * lower_bounds_width;
+                const y = (i / chunk_width) * lower_bounds_height;
+                try new_chunk.build_forest_chunk(lower_bounds_width, lower_bounds_height, x, y);
+                try self.chunks.append(new_chunk);
+            }
+            for (0..self.chunks.items.len) |k| {
+                const chunk = self.chunks.items[k];
+                var indx: usize = 0;
+                for (chunk.y..chunk.y + chunk.height) |i| {
+                    for (chunk.x..chunk.x + chunk.width) |j| {
+                        self.assign_tile(j, i, chunk.tiles[indx], true);
+                        indx += 1;
+                    }
+                }
+            }
+            const start_chunk = rand.intRangeAtMost(usize, 0, num_chunks - 1);
+            self.chunks.items[start_chunk].start = .{
+                .tile = ForestTiles.FLOOR,
+                .x = 0,
+                .y = 0,
+            };
+            self.start_chunk = .{
+                .chunk_indx = start_chunk,
+                .chunk_info = &self.chunks.items[start_chunk].start,
+            };
+            //TODO build connecting roads
+            //TODO add dungeon entrances
+            //TODO add ability to move to new segments by reaching edges
+        }
+        //TODO add more parameters
+        //TODO add generation
+        fn _generate_dungeon(self: *Self, width: usize, height: usize, num_rooms: usize) Error!void {
+            self.tex = Texture.init(self.allocator);
+            self.tex.is_ascii = true;
+            self.width = width;
+            self.height = height;
+            try self.tex.rect(@intCast(width), @intCast(height), 0, 0, 0, 255);
+            for (0..self.tex.pixel_buffer.len) |i| {
+                self.tex.pixel_buffer[i] = DungeonTiles.EMPTY.color;
+                self.tex.background_pixel_buffer[i] = DungeonTiles.EMPTY.bck_color;
+                self.tex.ascii_buffer[i] = DungeonTiles.EMPTY.symbol;
             }
             var cur_object: usize = 0;
             const MAX_ATTEMPTS = 20;
             var attempt: usize = 0;
             //TODO generate forest, probably break down world into patches that are connected with roads, and fill surrounding area with grass/trees
             //TODO will need to figure out how we want to break down the map, might just be a full grid and overwrite areas with connecting roads
-            if (TileType == ForestTiles) unreachable;
             outer: while (cur_object < num_rooms) {
                 if (attempt >= MAX_ATTEMPTS) break;
-                switch (self.map_type) {
-                    .DUNGEON => {
-                        var new_room = MapChunk.init(self.allocator);
-                        try new_room.build_map_chunk(self.width, self.height, 8);
-                        if (self.chunks.items.len == 0) {
-                            try self.chunks.append(new_room);
-                            cur_object += 1;
-                        } else {
-                            for (0..self.chunks.items.len) |i| {
-                                if (self.chunks.items[i].has_conflict(&new_room)) {
-                                    attempt += 1;
-                                    new_room.deinit();
-                                    continue :outer;
-                                }
-                            }
-                            try self.chunks.append(new_room);
-                            cur_object += 1;
-                            attempt = 0;
+                var new_room = MapChunk.init(self.allocator);
+                try new_room.build_room(self.width, self.height, 8);
+                if (self.chunks.items.len == 0) {
+                    try self.chunks.append(new_room);
+                    cur_object += 1;
+                } else {
+                    for (0..self.chunks.items.len) |i| {
+                        if (self.chunks.items[i].has_conflict(&new_room)) {
+                            attempt += 1;
+                            new_room.deinit();
+                            continue :outer;
                         }
-                    },
-                    .FOREST => {
-                        unreachable;
-                    },
+                    }
+                    try self.chunks.append(new_room);
+                    cur_object += 1;
+                    attempt = 0;
                 }
             }
             for (0..self.chunks.items.len) |k| {
@@ -277,41 +335,41 @@ pub fn Map(comptime color_type: ColorMode) type {
                         if (r2_center.y > r1_center.y) {
                             curr_y = r1.y + r1.height - 1;
                             while (curr_y <= r2_center.y) : (curr_y += 1) {
-                                self.assign_tile(curr_x, curr_y, TileType.VERT_FLOOR, false);
+                                self.assign_tile(curr_x, curr_y, DungeonTiles.VERT_FLOOR, false);
                                 //if (r2.contains_point(.{ .x = curr_x, .y = curr_y })) break;
-                                self.assign_tile(curr_x - 1, curr_y, TileType.VERT_WALL, false);
-                                self.assign_tile(curr_x + 1, curr_y, TileType.VERT_WALL, false);
+                                self.assign_tile(curr_x - 1, curr_y, DungeonTiles.VERT_WALL, false);
+                                self.assign_tile(curr_x + 1, curr_y, DungeonTiles.VERT_WALL, false);
                             }
-                            self.assign_tile(curr_x, curr_y, TileType.VERT_WALL, false);
+                            self.assign_tile(curr_x, curr_y, DungeonTiles.VERT_WALL, false);
                             curr_y -= 1;
                         } else {
                             curr_y = r1.y;
                             while (curr_y >= r2_center.y) : (curr_y -= 1) {
-                                self.assign_tile(curr_x, curr_y, TileType.VERT_FLOOR, false);
+                                self.assign_tile(curr_x, curr_y, DungeonTiles.VERT_FLOOR, false);
                                 //if (r2.contains_point(.{ .x = curr_x, .y = curr_y })) break;
-                                self.assign_tile(curr_x - 1, curr_y, TileType.VERT_WALL, false);
-                                self.assign_tile(curr_x + 1, curr_y, TileType.VERT_WALL, false);
+                                self.assign_tile(curr_x - 1, curr_y, DungeonTiles.VERT_WALL, false);
+                                self.assign_tile(curr_x + 1, curr_y, DungeonTiles.VERT_WALL, false);
                             }
-                            self.assign_tile(curr_x, curr_y, TileType.VERT_WALL, false);
+                            self.assign_tile(curr_x, curr_y, DungeonTiles.VERT_WALL, false);
                             curr_y += 1;
                         }
                         if (r2_center.x > r1_center.x) {
                             curr_x += 1;
                             while (r1.contains_point(.{ .x = curr_x, .y = curr_y })) curr_x += 1;
-                            self.assign_tile(curr_x, curr_y, TileType.HOR_FLOOR, false);
+                            self.assign_tile(curr_x, curr_y, DungeonTiles.HOR_FLOOR, false);
                             while (curr_x <= r2.x) : (curr_x += 1) {
-                                self.assign_tile(curr_x, curr_y, TileType.HOR_FLOOR, false);
-                                self.assign_tile(curr_x, curr_y - 1, TileType.HOR_WALL, false);
-                                self.assign_tile(curr_x, curr_y + 1, TileType.HOR_WALL, false);
+                                self.assign_tile(curr_x, curr_y, DungeonTiles.HOR_FLOOR, false);
+                                self.assign_tile(curr_x, curr_y - 1, DungeonTiles.HOR_WALL, false);
+                                self.assign_tile(curr_x, curr_y + 1, DungeonTiles.HOR_WALL, false);
                             }
                         } else {
                             curr_x -= 1;
                             while (r1.contains_point(.{ .x = curr_x, .y = curr_y })) curr_x -= 1;
-                            self.assign_tile(curr_x, curr_y, TileType.HOR_FLOOR, false);
+                            self.assign_tile(curr_x, curr_y, DungeonTiles.HOR_FLOOR, false);
                             while (curr_x >= r2.x + r2.width - 1) : (curr_x -= 1) {
-                                self.assign_tile(curr_x, curr_y, TileType.HOR_FLOOR, false);
-                                self.assign_tile(curr_x, curr_y - 1, TileType.HOR_WALL, false);
-                                self.assign_tile(curr_x, curr_y + 1, TileType.HOR_WALL, false);
+                                self.assign_tile(curr_x, curr_y, DungeonTiles.HOR_FLOOR, false);
+                                self.assign_tile(curr_x, curr_y - 1, DungeonTiles.HOR_WALL, false);
+                                self.assign_tile(curr_x, curr_y + 1, DungeonTiles.HOR_WALL, false);
                             }
                         }
                     } else {
@@ -319,43 +377,43 @@ pub fn Map(comptime color_type: ColorMode) type {
                         if (r2_center.x > r1_center.x) {
                             curr_x = r1.x + r1.width - 1;
                             while (curr_x <= r2_center.x) : (curr_x += 1) {
-                                self.assign_tile(curr_x, curr_y, TileType.HOR_FLOOR, false);
+                                self.assign_tile(curr_x, curr_y, DungeonTiles.HOR_FLOOR, false);
                                 //if (r2.contains_point(.{ .x = curr_x, .y = curr_y })) break;
-                                self.assign_tile(curr_x, curr_y - 1, TileType.HOR_WALL, false);
-                                self.assign_tile(curr_x, curr_y + 1, TileType.HOR_WALL, false);
+                                self.assign_tile(curr_x, curr_y - 1, DungeonTiles.HOR_WALL, false);
+                                self.assign_tile(curr_x, curr_y + 1, DungeonTiles.HOR_WALL, false);
                             }
-                            self.assign_tile(curr_x, curr_y, TileType.HOR_WALL, false);
+                            self.assign_tile(curr_x, curr_y, DungeonTiles.HOR_WALL, false);
                             curr_x -= 1;
                         } else {
                             curr_x = r1.x;
                             while (curr_x >= r2_center.x) : (curr_x -= 1) {
-                                self.assign_tile(curr_x, curr_y, TileType.HOR_FLOOR, false);
+                                self.assign_tile(curr_x, curr_y, DungeonTiles.HOR_FLOOR, false);
                                 //if (r2.contains_point(.{ .x = curr_x, .y = curr_y })) break;
-                                self.assign_tile(curr_x, curr_y - 1, TileType.HOR_WALL, false);
-                                self.assign_tile(curr_x, curr_y + 1, TileType.HOR_WALL, false);
+                                self.assign_tile(curr_x, curr_y - 1, DungeonTiles.HOR_WALL, false);
+                                self.assign_tile(curr_x, curr_y + 1, DungeonTiles.HOR_WALL, false);
                             }
-                            self.assign_tile(curr_x, curr_y, TileType.HOR_WALL, false);
+                            self.assign_tile(curr_x, curr_y, DungeonTiles.HOR_WALL, false);
                             curr_x += 1;
                         }
                         if (r2_center.y > r1_center.y) {
                             curr_y += 1;
                             while (r1.contains_point(.{ .x = curr_x, .y = curr_y })) curr_y += 1;
-                            self.assign_tile(curr_x, curr_y, TileType.HOR_FLOOR, false);
+                            self.assign_tile(curr_x, curr_y, DungeonTiles.HOR_FLOOR, false);
                             while (curr_y <= r2.y) : (curr_y += 1) {
-                                self.assign_tile(curr_x, curr_y, TileType.VERT_FLOOR, false);
+                                self.assign_tile(curr_x, curr_y, DungeonTiles.VERT_FLOOR, false);
                                 //if (r2.contains_point(.{ .x = curr_x, .y = curr_y })) break;
-                                self.assign_tile(curr_x - 1, curr_y, TileType.VERT_WALL, false);
-                                self.assign_tile(curr_x + 1, curr_y, TileType.VERT_WALL, false);
+                                self.assign_tile(curr_x - 1, curr_y, DungeonTiles.VERT_WALL, false);
+                                self.assign_tile(curr_x + 1, curr_y, DungeonTiles.VERT_WALL, false);
                             }
                         } else {
                             curr_y -= 1;
                             while (r1.contains_point(.{ .x = curr_x, .y = curr_y })) curr_y -= 1;
-                            self.assign_tile(curr_x, curr_y, TileType.HOR_FLOOR, false);
+                            self.assign_tile(curr_x, curr_y, DungeonTiles.HOR_FLOOR, false);
                             while (curr_y >= r2.y + r2.height - 1) : (curr_y -= 1) {
-                                self.assign_tile(curr_x, curr_y, TileType.VERT_FLOOR, false);
+                                self.assign_tile(curr_x, curr_y, DungeonTiles.VERT_FLOOR, false);
                                 //if (r2.contains_point(.{ .x = curr_x, .y = curr_y })) break;
-                                self.assign_tile(curr_x - 1, curr_y, TileType.VERT_WALL, false);
-                                self.assign_tile(curr_x + 1, curr_y, TileType.VERT_WALL, false);
+                                self.assign_tile(curr_x - 1, curr_y, DungeonTiles.VERT_WALL, false);
+                                self.assign_tile(curr_x + 1, curr_y, DungeonTiles.VERT_WALL, false);
                             }
                         }
                     }
@@ -371,15 +429,15 @@ pub fn Map(comptime color_type: ColorMode) type {
             const exit_room_x = rand.intRangeAtMost(usize, 1, self.chunks.items[exit_room].width - 2);
             const exit_room_y = rand.intRangeAtMost(usize, 1, self.chunks.items[exit_room].height - 2);
 
-            self.assign_tile(self.chunks.items[start_room].x + start_room_x, self.chunks.items[start_room].y + start_room_y, TileType.START, true);
-            self.assign_tile(self.chunks.items[exit_room].x + exit_room_x, self.chunks.items[exit_room].y + exit_room_y, TileType.EXIT, true);
+            self.assign_tile(self.chunks.items[start_room].x + start_room_x, self.chunks.items[start_room].y + start_room_y, DungeonTiles.START, true);
+            self.assign_tile(self.chunks.items[exit_room].x + exit_room_x, self.chunks.items[exit_room].y + exit_room_y, DungeonTiles.EXIT, true);
             self.chunks.items[start_room].start = .{
-                .tile = TileType.START,
+                .tile = DungeonTiles.START,
                 .x = start_room_x,
                 .y = start_room_y,
             };
             self.chunks.items[exit_room].exit = .{
-                .tile = TileType.EXIT,
+                .tile = DungeonTiles.EXIT,
                 .x = exit_room_x,
                 .y = exit_room_y,
             };
@@ -393,11 +451,12 @@ pub fn Map(comptime color_type: ColorMode) type {
                 .chunk_info = &self.chunks.items[exit_room].exit,
             };
         }
-        pub fn generate(self: *Self, width: usize, height: usize, num_rooms: usize, name: []const u8) Error!void {
+        //TODO change to kwargs??
+        pub fn generate(self: *Self, width: usize, height: usize, name: []const u8, num_rooms: usize) Error!void {
             self.name = try self.allocator.dupe(u8, name);
             switch (self.map_type) {
-                .DUNGEON => try self._generate(width, height, num_rooms, DungeonTiles),
-                .FOREST => try self._generate(width, height, num_rooms, ForestTiles),
+                .DUNGEON => try self._generate_dungeon(width, height, num_rooms),
+                .FOREST => try self._generate_forest(width, height),
             }
         }
 
