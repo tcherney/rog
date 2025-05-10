@@ -18,16 +18,28 @@ const TEXT_COLOR = Colors.WHITE;
 
 pub const MapExit = struct {
     map_indx: usize = undefined,
-    chunk_info: *MapChunk.MapTile,
-    chunk_indx: usize,
+    map_col_indx: usize = undefined,
+    chunk_info: MapTile,
     ext_map_indx: usize = undefined,
-    ext_chunk_info: *MapChunk.MapTile = undefined,
-    ext_chunk_indx: usize = undefined,
-    pub fn connect_chunks(self: *MapExit, other: *MapExit, self_indx: usize, other_indx: usize) void {
-        self.map_indx = self_indx;
-        self.ext_map_indx = other_indx;
-        other.map_indx = other_indx;
-        other.ext_map_indx = self_indx;
+    ext_map_col_indx: usize = undefined,
+    ext_chunk_info: MapTile = undefined,
+    connected: bool = false,
+    pub fn connect_chunks(self: *MapExit, other: *MapExit, self_map_indx: usize, other_map_indx: usize, self_map_col_indx: usize, other_map_col_indx: usize) void {
+        self.map_indx = self_map_indx;
+        self.ext_map_indx = other_map_indx;
+        other.map_indx = other_map_indx;
+        other.ext_map_indx = self_map_indx;
+
+        self.map_col_indx = self_map_col_indx;
+        self.ext_map_col_indx = other_map_col_indx;
+        other.map_col_indx = other_map_col_indx;
+        other.ext_map_col_indx = self_map_col_indx;
+
+        self.ext_chunk_info = other.chunk_info;
+        other.ext_chunk_info = self.chunk_info;
+
+        self.connected = true;
+        other.connected = true;
     }
 };
 
@@ -44,13 +56,6 @@ pub const MapChunk = struct {
     width: usize = undefined,
     x: usize = undefined,
     y: usize = undefined,
-    start: MapTile = undefined,
-    exit: MapTile = undefined,
-    pub const MapTile = struct {
-        tile: Tile,
-        x: usize,
-        y: usize,
-    };
     pub const Error = error{} || Allocator.Error;
     pub fn init(allocator: Allocator) MapChunk {
         return MapChunk{
@@ -122,6 +127,12 @@ pub const ForestTiles = struct {
     pub const EXIT: Tile = Tile{ .symbol = '$', .color = Colors.MAGENTA, .bck_color = Colors.BLACK };
 };
 
+pub const MapTile = struct {
+    tile: Tile,
+    x: usize,
+    y: usize,
+};
+
 pub fn Map(comptime color_type: ColorMode) type {
     return struct {
         allocator: Allocator,
@@ -129,8 +140,8 @@ pub fn Map(comptime color_type: ColorMode) type {
         width: usize = undefined,
         height: usize = undefined,
         chunks: std.ArrayList(MapChunk),
-        start_chunk: MapExit = undefined,
-        exit_chunk: MapExit = undefined,
+        start_chunks: std.ArrayList(MapExit) = undefined,
+        exit_chunks: std.ArrayList(MapExit) = undefined,
         map_type: MapType = undefined,
         name: []u8 = undefined,
 
@@ -141,6 +152,8 @@ pub fn Map(comptime color_type: ColorMode) type {
                 .allocator = allocator,
                 .map_type = map_type,
                 .chunks = std.ArrayList(MapChunk).init(allocator),
+                .start_chunks = std.ArrayList(MapExit).init(allocator),
+                .exit_chunks = std.ArrayList(MapExit).init(allocator),
             };
         }
         pub fn deinit(self: *Self) void {
@@ -150,27 +163,32 @@ pub fn Map(comptime color_type: ColorMode) type {
             }
             self.chunks.deinit();
             self.allocator.free(self.name);
+            self.start_chunks.deinit();
+            self.exit_chunks.deinit();
         }
-        pub fn chunk_to_map_coord(self: *const Self, chunk_id: usize, x: usize, y: usize) Point {
-            return .{
-                .x = self.chunks.items[chunk_id].x + x,
-                .y = self.chunks.items[chunk_id].y + y,
-            };
-        }
+        // pub fn chunk_to_map_coord(self: *const Self, chunk_id: usize, x: usize, y: usize) Point {
+        //     return .{
+        //         .x = self.chunks.items[chunk_id].x + x,
+        //         .y = self.chunks.items[chunk_id].y + y,
+        //     };
+        // }
 
-        pub fn start_map_coord(self: *const Self) Point {
-            return self.chunk_to_map_coord(self.start_chunk.chunk_indx, self.chunks.items[self.start_chunk.chunk_indx].start.x, self.chunks.items[self.start_chunk.chunk_indx].start.y);
-        }
+        // pub fn start_map_coord(self: *const Self) Point {
+        //     const start = self.start_chunks.items[0];
+        //     return self.chunk_to_map_coord(start.chunk_indx, start.chunk_info.x, start.chunk_info.y);
+        // }
 
-        pub fn exit_map_coord(self: *const Self) Point {
-            return self.chunk_to_map_coord(self.exit_chunk.chunk_indx, self.chunks.items[self.exit_chunk.chunk_indx].exit.x, self.chunks.items[self.exit_chunk.chunk_indx].exit.y);
-        }
-
+        // pub fn exit_map_coord(self: *const Self) Point {
+        //     const exit = self.exit_chunks.items[0];
+        //     return self.chunk_to_map_coord(exit.chunk_indx, exit.chunk_info.x, exit.chunk_info.y);
+        // }
+        //TODO update for forest
         fn _valid_position(self: *const Self, x: i32, y: i32, TileType: type) bool {
             const x_usize: usize = @intCast(@as(u32, @bitCast(x)));
             const y_usize: usize = @intCast(@as(u32, @bitCast(y)));
             if (TileType == ForestTiles) {
-                return self.tex.ascii_buffer[y_usize * self.width + x_usize] == TileType.FLOOR.symbol;
+                return true;
+                //return self.tex.ascii_buffer[y_usize * self.width + x_usize] == TileType.FLOOR.symbol;
             } else if (TileType == DungeonTiles) {
                 return self.tex.ascii_buffer[y_usize * self.width + x_usize] != TileType.WALL.symbol and self.tex.ascii_buffer[y_usize * self.width + x_usize] != TileType.HOR_WALL.symbol and self.tex.ascii_buffer[y_usize * self.width + x_usize] != TileType.VERT_WALL.symbol;
             }
@@ -230,12 +248,18 @@ pub fn Map(comptime color_type: ColorMode) type {
                 self.tex.background_pixel_buffer[i] = ForestTiles.EMPTY.bck_color;
                 self.tex.ascii_buffer[i] = ForestTiles.EMPTY.symbol;
             }
-            var lower_bounds_width: usize = 6;
-            var lower_bounds_height: usize = 4;
-            while (lower_bounds_width % self.width != 0) lower_bounds_width += 1;
-            while (lower_bounds_height % self.height != 0) lower_bounds_height += 1;
+            var lower_bounds_width: usize = 3;
+            var lower_bounds_height: usize = 3;
+            std.debug.print("\nWorld width: {d}\n", .{width});
+            std.debug.print("\nWorld height: {d}\n", .{height});
+            while (self.width % lower_bounds_width != 0) lower_bounds_width += 1;
+            while (self.height % lower_bounds_height != 0) lower_bounds_height += 1;
+            std.debug.print("lower width: {d}\n", .{lower_bounds_width});
+            std.debug.print("lower height: {d}\n", .{lower_bounds_height});
             const chunk_width = self.width / lower_bounds_width;
-            const chunk_height = self.width / lower_bounds_width;
+            const chunk_height = self.height / lower_bounds_height;
+            std.debug.print("chunk width: {d}\n", .{chunk_width});
+            std.debug.print("chunk height: {d}\n", .{chunk_height});
             const num_chunks = chunk_width * chunk_height;
             for (0..num_chunks) |i| {
                 var new_chunk = MapChunk.init(self.allocator);
@@ -254,16 +278,15 @@ pub fn Map(comptime color_type: ColorMode) type {
                     }
                 }
             }
-            const start_chunk = rand.intRangeAtMost(usize, 0, num_chunks - 1);
-            self.chunks.items[start_chunk].start = .{
-                .tile = ForestTiles.FLOOR,
-                .x = 0,
-                .y = 0,
-            };
-            self.start_chunk = .{
-                .chunk_indx = start_chunk,
-                .chunk_info = &self.chunks.items[start_chunk].start,
-            };
+            const x_start = rand.intRangeAtMost(usize, 0, self.width - 1);
+            const y_start = rand.intRangeAtMost(usize, 0, self.height - 1);
+            try self.start_chunks.append(.{
+                .chunk_info = .{
+                    .tile = ForestTiles.FLOOR,
+                    .x = x_start,
+                    .y = y_start,
+                },
+            });
             //TODO build connecting roads
             //TODO add dungeon entrances
             //TODO add ability to move to new segments by reaching edges
@@ -431,25 +454,21 @@ pub fn Map(comptime color_type: ColorMode) type {
 
             self.assign_tile(self.chunks.items[start_room].x + start_room_x, self.chunks.items[start_room].y + start_room_y, DungeonTiles.START, true);
             self.assign_tile(self.chunks.items[exit_room].x + exit_room_x, self.chunks.items[exit_room].y + exit_room_y, DungeonTiles.EXIT, true);
-            self.chunks.items[start_room].start = .{
-                .tile = DungeonTiles.START,
-                .x = start_room_x,
-                .y = start_room_y,
-            };
-            self.chunks.items[exit_room].exit = .{
-                .tile = DungeonTiles.EXIT,
-                .x = exit_room_x,
-                .y = exit_room_y,
-            };
-            self.start_chunk = .{
-                .chunk_indx = start_room,
-                .chunk_info = &self.chunks.items[start_room].start,
-            };
+            try self.start_chunks.append(.{
+                .chunk_info = .{
+                    .tile = DungeonTiles.START,
+                    .x = self.chunks.items[start_room].x + start_room_x,
+                    .y = self.chunks.items[start_room].y + start_room_y,
+                },
+            });
 
-            self.exit_chunk = .{
-                .chunk_indx = exit_room,
-                .chunk_info = &self.chunks.items[exit_room].exit,
-            };
+            try self.exit_chunks.append(.{
+                .chunk_info = .{
+                    .tile = DungeonTiles.EXIT,
+                    .x = self.chunks.items[exit_room].x + exit_room_x,
+                    .y = self.chunks.items[exit_room].y + exit_room_y,
+                },
+            });
         }
         //TODO change to kwargs??
         pub fn generate(self: *Self, width: usize, height: usize, name: []const u8, num_rooms: usize) Error!void {

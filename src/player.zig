@@ -11,7 +11,7 @@ const MoveDirection = enum {
     UP,
     DOWN,
 };
-
+//TODO why do we have i32
 pub fn Player(comptime color_type: ColorMode) type {
     return struct {
         x: i32,

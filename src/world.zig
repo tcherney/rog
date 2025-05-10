@@ -10,6 +10,7 @@ const AsciiGraphics = engine.AsciiGraphics;
 const MapExit = map.MapExit;
 const Texture = engine.Texture;
 const Pixel = common.Pixel;
+const rand = std.crypto.random;
 pub var scratch_buffer: [32]u8 = undefined;
 //TODO move out to a constants/config file
 const TEXT_COLOR = common.Colors.WHITE;
@@ -26,13 +27,17 @@ pub fn World(comptime color_type: ColorMode) type {
         pub const MapCollection = struct {
             allocator: Allocator,
             maps: []Map = undefined,
-            entrance: MapExit = undefined,
-            exit: MapExit = undefined,
+            //TODO I dont think we actually need these, since the collections dont really have an absolute point of entry
+            //TODO actually should just remove this
+            entrances: std.ArrayList(*MapExit) = undefined,
+            exits: std.ArrayList(*MapExit) = undefined,
             name: []u8 = undefined,
             current_map: usize = 0,
             pub fn init(allocator: Allocator) MapCollection {
                 return .{
                     .allocator = allocator,
+                    .entrances = std.ArrayList(*MapExit).init(allocator),
+                    .exits = std.ArrayList(*MapExit).init(allocator),
                 };
             }
 
@@ -42,6 +47,8 @@ pub fn World(comptime color_type: ColorMode) type {
                 }
                 self.allocator.free(self.name);
                 self.allocator.free(self.maps);
+                self.entrances.deinit();
+                self.exits.deinit();
             }
             pub fn generate_forest(self: *MapCollection, width: usize, height: usize, n_maps: usize, name: []const u8) Error!void {
                 self.maps = try self.allocator.alloc(Map, n_maps);
@@ -57,7 +64,7 @@ pub fn World(comptime color_type: ColorMode) type {
                 // self.entrance = self.maps[0].start_chunk;
                 // self.exit = self.maps[n_maps - 1].exit_chunk;
             }
-            pub fn generate_dungeon(self: *MapCollection, width: usize, height: usize, n_rooms: usize, n_maps: usize, name: []const u8) Error!void {
+            pub fn generate_dungeon(self: *MapCollection, width: usize, height: usize, n_rooms: usize, n_maps: usize, indx: usize, name: []const u8) Error!void {
                 self.maps = try self.allocator.alloc(Map, n_maps);
                 self.name = try self.allocator.dupe(u8, name);
                 for (0..self.maps.len) |i| {
@@ -66,10 +73,10 @@ pub fn World(comptime color_type: ColorMode) type {
                 }
                 //connect maps together
                 for (1..self.maps.len) |i| {
-                    self.maps[i].start_chunk.connect_chunks(&self.maps[i - 1].exit_chunk, i, i - 1);
+                    self.maps[i].start_chunks.items[0].connect_chunks(&self.maps[i - 1].exit_chunks.items[0], i, i - 1, indx, indx);
                 }
-                self.entrance = self.maps[0].start_chunk;
-                self.exit = self.maps[n_maps - 1].exit_chunk;
+                try self.entrances.append(&self.maps[0].start_chunks.items[0]);
+                try self.exits.append(&self.maps[n_maps - 1].exit_chunks.items[0]);
             }
             pub fn draw(self: *MapCollection, x: i32, y: i32, renderer: *AsciiGraphics(color_type), dest: ?Texture) Error!void {
                 // calc offsets
@@ -116,15 +123,31 @@ pub fn World(comptime color_type: ColorMode) type {
             try self.map_cols[0].generate_forest(width, height, 1, "World");
             for (1..self.map_cols.len) |i| {
                 self.map_cols[i] = MapCollection.init(self.allocator);
-                try self.map_cols[i].generate_dungeon(width, height, rooms_per_dungeon, maps_per_dung, try std.fmt.bufPrint(&scratch_buffer, "Dungeon {d}", .{i}));
+                try self.map_cols[i].generate_dungeon(width, height, rooms_per_dungeon, maps_per_dung, i, try std.fmt.bufPrint(&scratch_buffer, "Dungeon {d}", .{i}));
             }
             //connect the dungeons
-            //TODO utilize entrance and exit to connect the dungeons to other maps, in this case for now just connect the dungeons together
-            for (2..self.map_cols.len) |i| {
-                //TODO will have to think about this better, we currently would need an index to the proper dungeon as well, for now we will just assume its the next one in the list
-                self.map_cols[i].entrance.connect_chunks(&self.map_cols[i - 1].exit, i, i - 1);
+            const num_overworld_chunks = self.map_cols[0].maps[self.map_cols[0].current_map].chunks.items.len;
+            std.debug.print("num overworld chunks {d}\n", .{num_overworld_chunks});
+            for (1..self.map_cols.len) |i| {
+                var chunk_id = rand.intRangeAtMost(usize, 0, num_overworld_chunks - 1);
+                std.debug.print("chunk id before {d}\n", .{chunk_id});
+                while (self.map_cols[0].maps[self.map_cols[0].current_map].chunks.items[chunk_id].tiles[0].symbol == map.ForestTiles.EXIT.symbol) {
+                    chunk_id = rand.intRangeAtMost(usize, 0, num_overworld_chunks - 1);
+                }
+                std.debug.print("chunk id after {d}\n", .{chunk_id});
+                const new_exit: MapExit = .{
+                    .chunk_info = .{
+                        .tile = map.ForestTiles.EXIT,
+                        .x = self.map_cols[0].maps[self.map_cols[0].current_map].chunks.items[chunk_id].x,
+                        .y = self.map_cols[0].maps[self.map_cols[0].current_map].chunks.items[chunk_id].y,
+                    },
+                };
+                try self.map_cols[0].maps[0].exit_chunks.append(new_exit);
+                try self.map_cols[0].exits.append(&self.map_cols[0].maps[0].exit_chunks.items[self.map_cols[0].maps[0].exit_chunks.items.len - 1]);
+
+                self.map_cols[0].maps[self.map_cols[0].current_map].assign_tile(self.map_cols[0].exits.items[self.map_cols[0].exits.items.len - 1].chunk_info.x, self.map_cols[0].exits.items[self.map_cols[0].exits.items.len - 1].chunk_info.y, map.ForestTiles.EXIT, true);
+                self.map_cols[i].entrances.items[0].connect_chunks(self.map_cols[0].exits.items[self.map_cols[0].exits.items.len - 1], 0, 0, i, 0);
             }
-            //TODO connect dungeons to overworld
         }
 
         pub fn draw(self: *Self, x: i32, y: i32, renderer: *AsciiGraphics(color_type), dest: ?Texture) Error!void {
@@ -134,44 +157,36 @@ pub fn World(comptime color_type: ColorMode) type {
         pub fn validate_player_position(self: *Self, p: *Player) void {
             const current_map = self.get_current_map();
             if (current_map.at_start(p.x, p.y)) {
-                //move between maps in dungeon
-                if (self.map_cols[self.current_map_col].current_map > 0) {
-                    std.debug.print("Moving back between maps\n", .{});
-                    self.map_cols[self.current_map_col].current_map -= 1;
-                    const new_pos = self.map_cols[self.current_map_col].maps[self.map_cols[self.current_map_col].current_map].exit_map_coord();
-                    p.x = @intCast(@as(i64, @bitCast(new_pos.x)));
-                    p.y = @intCast(@as(i64, @bitCast(new_pos.y)));
-                }
-                // move to another dungeon
-                else {
-                    if (self.current_map_col > 0) {
-                        std.debug.print("Moving back between dungeons\n", .{});
-                        self.current_map_col -= 1;
-                        self.map_cols[self.current_map_col].current_map = self.map_cols[self.current_map_col].maps.len - 1;
-                        const new_pos = self.map_cols[self.current_map_col].maps[self.map_cols[self.current_map_col].current_map].exit_map_coord();
-                        p.x = @intCast(@as(i64, @bitCast(new_pos.x)));
-                        p.y = @intCast(@as(i64, @bitCast(new_pos.y)));
+                var exit: *MapExit = undefined;
+                const x_usize: usize = @intCast(@as(u32, @bitCast(p.x)));
+                const y_usize: usize = @intCast(@as(u32, @bitCast(p.y)));
+                for (0..current_map.start_chunks.items.len) |i| {
+                    if (current_map.start_chunks.items[i].chunk_info.x == x_usize and current_map.start_chunks.items[i].chunk_info.y == y_usize) {
+                        exit = &current_map.start_chunks.items[i];
                     }
+                }
+                if (exit.connected) {
+                    self.current_map_col = exit.ext_map_col_indx;
+                    self.map_cols[self.current_map_col].current_map = exit.ext_map_indx;
+                    p.x = @intCast(@as(i64, @bitCast(exit.ext_chunk_info.x)));
+                    p.y = @intCast(@as(i64, @bitCast(exit.ext_chunk_info.y)));
                 }
             } else if (current_map.at_exit(p.x, p.y)) {
-                //move between maps in dungeon
-                if (self.map_cols[self.current_map_col].current_map < self.map_cols[self.current_map_col].maps.len - 1) {
-                    std.debug.print("Moving up between maps\n", .{});
-                    self.map_cols[self.current_map_col].current_map += 1;
-                    const new_pos = self.map_cols[self.current_map_col].maps[self.map_cols[self.current_map_col].current_map].start_map_coord();
-                    p.x = @intCast(@as(i64, @bitCast(new_pos.x)));
-                    p.y = @intCast(@as(i64, @bitCast(new_pos.y)));
-                }
-                // move to another dungeon
-                else {
-                    if (self.current_map_col < self.map_cols.len - 1) {
-                        std.debug.print("Moving up between dungeons\n", .{});
-                        self.current_map_col += 1;
-                        self.map_cols[self.current_map_col].current_map = 0;
-                        const new_pos = self.map_cols[self.current_map_col].maps[self.map_cols[self.current_map_col].current_map].start_map_coord();
-                        p.x = @intCast(@as(i64, @bitCast(new_pos.x)));
-                        p.y = @intCast(@as(i64, @bitCast(new_pos.y)));
+                var start: *MapExit = undefined;
+                const x_usize: usize = @intCast(@as(u32, @bitCast(p.x)));
+                const y_usize: usize = @intCast(@as(u32, @bitCast(p.y)));
+                for (0..current_map.exit_chunks.items.len) |i| {
+                    if (current_map.exit_chunks.items[i].chunk_info.x == x_usize and current_map.exit_chunks.items[i].chunk_info.y == y_usize) {
+                        start = &current_map.exit_chunks.items[i];
+                        std.debug.print("Found exit\n", .{});
+                        break;
                     }
+                }
+                if (start.connected) {
+                    self.current_map_col = start.ext_map_col_indx;
+                    self.map_cols[self.current_map_col].current_map = start.ext_map_indx;
+                    p.x = @intCast(@as(i64, @bitCast(start.ext_chunk_info.x)));
+                    p.y = @intCast(@as(i64, @bitCast(start.ext_chunk_info.y)));
                 }
             }
         }
