@@ -27,17 +27,11 @@ pub fn World(comptime color_type: ColorMode) type {
         pub const MapCollection = struct {
             allocator: Allocator,
             maps: []Map = undefined,
-            //TODO I dont think we actually need these, since the collections dont really have an absolute point of entry
-            //TODO actually should just remove this
-            entrances: std.ArrayList(*MapExit) = undefined,
-            exits: std.ArrayList(*MapExit) = undefined,
             name: []u8 = undefined,
             current_map: usize = 0,
             pub fn init(allocator: Allocator) MapCollection {
                 return .{
                     .allocator = allocator,
-                    .entrances = std.ArrayList(*MapExit).init(allocator),
-                    .exits = std.ArrayList(*MapExit).init(allocator),
                 };
             }
 
@@ -47,8 +41,6 @@ pub fn World(comptime color_type: ColorMode) type {
                 }
                 self.allocator.free(self.name);
                 self.allocator.free(self.maps);
-                self.entrances.deinit();
-                self.exits.deinit();
             }
             pub fn generate_forest(self: *MapCollection, width: usize, height: usize, n_maps: usize, name: []const u8) Error!void {
                 self.maps = try self.allocator.alloc(Map, n_maps);
@@ -75,8 +67,6 @@ pub fn World(comptime color_type: ColorMode) type {
                 for (1..self.maps.len) |i| {
                     self.maps[i].start_chunks.items[0].connect_chunks(&self.maps[i - 1].exit_chunks.items[0], i, i - 1, indx, indx);
                 }
-                try self.entrances.append(&self.maps[0].start_chunks.items[0]);
-                try self.exits.append(&self.maps[n_maps - 1].exit_chunks.items[0]);
             }
             pub fn draw(self: *MapCollection, x: i32, y: i32, renderer: *AsciiGraphics(color_type), dest: ?Texture) Error!void {
                 // calc offsets
@@ -142,11 +132,10 @@ pub fn World(comptime color_type: ColorMode) type {
                         .y = self.map_cols[0].maps[self.map_cols[0].current_map].chunks.items[chunk_id].y,
                     },
                 };
+                //TODO clean this up to be more readable
                 try self.map_cols[0].maps[0].exit_chunks.append(new_exit);
-                try self.map_cols[0].exits.append(&self.map_cols[0].maps[0].exit_chunks.items[self.map_cols[0].maps[0].exit_chunks.items.len - 1]);
-
-                self.map_cols[0].maps[self.map_cols[0].current_map].assign_tile(self.map_cols[0].exits.items[self.map_cols[0].exits.items.len - 1].chunk_info.x, self.map_cols[0].exits.items[self.map_cols[0].exits.items.len - 1].chunk_info.y, map.ForestTiles.EXIT, true);
-                self.map_cols[i].entrances.items[0].connect_chunks(self.map_cols[0].exits.items[self.map_cols[0].exits.items.len - 1], 0, 0, i, 0);
+                self.map_cols[0].maps[self.map_cols[0].current_map].assign_tile(self.map_cols[0].maps[0].exit_chunks.items[self.map_cols[0].maps[0].exit_chunks.items.len - 1].chunk_info.x, self.map_cols[0].maps[0].exit_chunks.items[self.map_cols[0].maps[0].exit_chunks.items.len - 1].chunk_info.y, map.ForestTiles.EXIT, true);
+                self.map_cols[i].maps[0].start_chunks.items[0].connect_chunks(&self.map_cols[0].maps[0].exit_chunks.items[self.map_cols[0].maps[0].exit_chunks.items.len - 1], 0, 0, i, 0);
             }
         }
 
