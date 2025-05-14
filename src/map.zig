@@ -96,6 +96,7 @@ pub const MapChunk = struct {
                 self.tiles[i * self.width + j] = ForestTiles.FLOOR;
             }
         }
+        //TODO add water,rock,trees and other objects
     }
 
     pub fn has_conflict(self: *MapChunk, other: *MapChunk) bool {
@@ -125,6 +126,10 @@ pub const ForestTiles = struct {
     pub const EMPTY: Tile = Tile{ .symbol = ' ', .color = Colors.BLACK, .bck_color = Colors.BLACK };
     pub const START: Tile = Tile{ .symbol = '*', .color = Colors.CYAN, .bck_color = Colors.BLACK };
     pub const EXIT: Tile = Tile{ .symbol = '$', .color = Colors.MAGENTA, .bck_color = Colors.BLACK };
+    pub const TREE: Tile = Tile{ .symbol = 'T', .color = Colors.GREEN, .bck_color = Colors.BLACK };
+    pub const WATER: Tile = Tile{ .symbol = '-', .color = Colors.BLUE, .bck_color = Colors.BLACK };
+    pub const ROCK: Tile = Tile{ .symbol = 'o', .color = Colors.WHITE, .bck_color = Colors.BLACK };
+    pub const ROAD: Tile = Tile{ .symbol = '.', .color = Colors.BROWN, .bck_color = Colors.BLACK };
 };
 
 pub const MapTile = struct {
