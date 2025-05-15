@@ -126,10 +126,11 @@ pub const ForestTiles = struct {
     pub const EMPTY: Tile = Tile{ .symbol = ' ', .color = Colors.BLACK, .bck_color = Colors.BLACK };
     pub const START: Tile = Tile{ .symbol = '*', .color = Colors.CYAN, .bck_color = Colors.BLACK };
     pub const EXIT: Tile = Tile{ .symbol = '$', .color = Colors.MAGENTA, .bck_color = Colors.BLACK };
-    pub const TREE: Tile = Tile{ .symbol = 'T', .color = Colors.GREEN, .bck_color = Colors.BLACK };
-    pub const WATER: Tile = Tile{ .symbol = '-', .color = Colors.BLUE, .bck_color = Colors.BLACK };
-    pub const ROCK: Tile = Tile{ .symbol = 'o', .color = Colors.WHITE, .bck_color = Colors.BLACK };
-    pub const ROAD: Tile = Tile{ .symbol = '.', .color = Colors.BROWN, .bck_color = Colors.BLACK };
+    pub const TREE: Tile = Tile{ .symbol = 'T', .color = Colors.WENGE, .bck_color = Colors.BLACK };
+    pub const WATER: Tile = Tile{ .symbol = '~', .color = Colors.CERULEAN, .bck_color = Colors.BLACK };
+    pub const ROCK: Tile = Tile{ .symbol = 'o', .color = Colors.STONE, .bck_color = Colors.BLACK };
+    pub const VERT_ROAD: Tile = Tile{ .symbol = '|', .color = Colors.BEAVER, .bck_color = Colors.BLACK };
+    pub const HOR_ROAD: Tile = Tile{ .symbol = '-', .color = Colors.BEAVER, .bck_color = Colors.BLACK };
 };
 
 pub const MapTile = struct {
@@ -187,15 +188,15 @@ pub fn Map(comptime color_type: ColorMode) type {
         //     const exit = self.exit_chunks.items[0];
         //     return self.chunk_to_map_coord(exit.chunk_indx, exit.chunk_info.x, exit.chunk_info.y);
         // }
-        //TODO update for forest
+
         fn _valid_position(self: *const Self, x: i32, y: i32, TileType: type) bool {
             const x_usize: usize = @intCast(@as(u32, @bitCast(x)));
             const y_usize: usize = @intCast(@as(u32, @bitCast(y)));
+            const tile_symbol = self.tex.ascii_buffer[y_usize * self.width + x_usize];
             if (TileType == ForestTiles) {
-                return true;
-                //return self.tex.ascii_buffer[y_usize * self.width + x_usize] == TileType.FLOOR.symbol;
+                return tile_symbol != TileType.TREE.symbol and tile_symbol != TileType.ROCK.symbol and tile_symbol != TileType.WATER.symbol;
             } else if (TileType == DungeonTiles) {
-                return self.tex.ascii_buffer[y_usize * self.width + x_usize] != TileType.WALL.symbol and self.tex.ascii_buffer[y_usize * self.width + x_usize] != TileType.HOR_WALL.symbol and self.tex.ascii_buffer[y_usize * self.width + x_usize] != TileType.VERT_WALL.symbol;
+                return tile_symbol != TileType.WALL.symbol and tile_symbol != TileType.HOR_WALL.symbol and tile_symbol != TileType.VERT_WALL.symbol;
             }
         }
 
@@ -280,6 +281,87 @@ pub fn Map(comptime color_type: ColorMode) type {
                     for (chunk.x..chunk.x + chunk.width) |j| {
                         self.assign_tile(j, i, chunk.tiles[indx], true);
                         indx += 1;
+                    }
+                }
+            }
+
+            for (0..self.chunks.items.len) |k| {
+                const road_probability = rand.intRangeAtMost(usize, 1, 20);
+                if (road_probability != 1) continue;
+                if (k < self.chunks.items.len) {
+                    //find center of the two rooms
+                    const r1 = self.chunks.items[k];
+                    var r2_indx: usize = rand.intRangeAtMost(usize, 0, self.chunks.items.len - 1);
+                    while (r2_indx == k) r2_indx = rand.intRangeAtMost(usize, 0, self.chunks.items.len - 1);
+                    const r2 = self.chunks.items[r2_indx];
+                    const r1_center: Point = .{ .x = r1.x + r1.width / 2, .y = r1.y + r1.height / 2 };
+                    const r2_center: Point = .{ .x = r2.x + r2.width / 2, .y = r2.y + r2.height / 2 };
+
+                    var vertical: bool = rand.boolean();
+                    if (r1.contains_point(.{ .x = r1.x, .y = r2_center.y })) vertical = false;
+                    if (r1.contains_point(.{ .x = r2_center.x, .y = r1.y })) vertical = true;
+                    var curr_y: usize = r1_center.y;
+                    var curr_x: usize = r1_center.x;
+                    if (vertical) {
+                        std.debug.print("From room {d} to {d} going vertical first", .{ k, k + 1 });
+                        if (r2_center.y > r1_center.y) {
+                            curr_y = r1.y + r1.height - 1;
+                            while (curr_y <= r2_center.y) : (curr_y += 1) {
+                                self.assign_tile(curr_x, curr_y, ForestTiles.VERT_ROAD, true);
+                            }
+                            curr_y -= 1;
+                        } else {
+                            curr_y = r1.y;
+                            while (curr_y >= r2_center.y) : (curr_y -= 1) {
+                                self.assign_tile(curr_x, curr_y, ForestTiles.VERT_ROAD, true);
+                            }
+                            curr_y += 1;
+                        }
+                        if (r2_center.x > r1_center.x) {
+                            curr_x += 1;
+                            while (r1.contains_point(.{ .x = curr_x, .y = curr_y })) curr_x += 1;
+                            self.assign_tile(curr_x, curr_y, ForestTiles.HOR_ROAD, true);
+                            while (curr_x <= r2.x) : (curr_x += 1) {
+                                self.assign_tile(curr_x, curr_y, ForestTiles.HOR_ROAD, true);
+                            }
+                        } else {
+                            curr_x -= 1;
+                            while (r1.contains_point(.{ .x = curr_x, .y = curr_y })) curr_x -= 1;
+                            self.assign_tile(curr_x, curr_y, ForestTiles.HOR_ROAD, true);
+                            while (curr_x >= r2.x + r2.width - 1) : (curr_x -= 1) {
+                                self.assign_tile(curr_x, curr_y, ForestTiles.HOR_ROAD, true);
+                            }
+                        }
+                    } else {
+                        std.debug.print("From room {d} to {d} going horizontal first", .{ k, k + 1 });
+                        if (r2_center.x > r1_center.x) {
+                            curr_x = r1.x + r1.width - 1;
+                            while (curr_x <= r2_center.x) : (curr_x += 1) {
+                                self.assign_tile(curr_x, curr_y, ForestTiles.HOR_ROAD, true);
+                            }
+                            curr_x -= 1;
+                        } else {
+                            curr_x = r1.x;
+                            while (curr_x >= r2_center.x) : (curr_x -= 1) {
+                                self.assign_tile(curr_x, curr_y, ForestTiles.HOR_ROAD, true);
+                            }
+                            curr_x += 1;
+                        }
+                        if (r2_center.y > r1_center.y) {
+                            curr_y += 1;
+                            while (r1.contains_point(.{ .x = curr_x, .y = curr_y })) curr_y += 1;
+                            self.assign_tile(curr_x, curr_y, ForestTiles.VERT_ROAD, true);
+                            while (curr_y <= r2.y) : (curr_y += 1) {
+                                self.assign_tile(curr_x, curr_y, ForestTiles.VERT_ROAD, true);
+                            }
+                        } else {
+                            curr_y -= 1;
+                            while (r1.contains_point(.{ .x = curr_x, .y = curr_y })) curr_y -= 1;
+                            self.assign_tile(curr_x, curr_y, ForestTiles.VERT_ROAD, true);
+                            while (curr_y >= r2.y + r2.height - 1) : (curr_y -= 1) {
+                                self.assign_tile(curr_x, curr_y, ForestTiles.VERT_ROAD, true);
+                            }
+                        }
                     }
                 }
             }
