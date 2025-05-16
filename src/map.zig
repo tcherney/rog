@@ -201,6 +201,7 @@ pub fn Map(comptime color_type: ColorMode) type {
         }
 
         pub fn valid_position(self: *const Self, x: i32, y: i32) bool {
+            if (x < 0 or y < 0 or x >= @as(i32, @intCast(@as(i64, @bitCast(self.width)))) or y >= @as(i32, @intCast(@as(i64, @bitCast(self.height))))) return true;
             switch (self.map_type) {
                 .DUNGEON => return self._valid_position(x, y, DungeonTiles),
                 .FOREST => return self._valid_position(x, y, ForestTiles),

@@ -145,6 +145,11 @@ pub fn World(comptime color_type: ColorMode) type {
 
         pub fn validate_player_position(self: *Self, p: *Player) void {
             const current_map = self.get_current_map();
+            //TODO instead, handle map edge transitions
+            if (p.x < 0) p.x = 0;
+            if (p.y < 0) p.y = 0;
+            if (p.x >= @as(i32, @intCast(@as(i64, @bitCast(current_map.width))))) p.x = @as(i32, @intCast(@as(i64, @bitCast(current_map.width - 1))));
+            if (p.y >= @as(i32, @intCast(@as(i64, @bitCast(current_map.height))))) p.y = @as(i32, @intCast(@as(i64, @bitCast(current_map.height - 1))));
             if (current_map.at_start(p.x, p.y)) {
                 var exit: *MapExit = undefined;
                 const x_usize: usize = @intCast(@as(u32, @bitCast(p.x)));
