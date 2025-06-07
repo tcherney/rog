@@ -1,5 +1,5 @@
 const std = @import("std");
-
+const builtin = @import("builtin");
 // Although this function looks imperative, note that its job is to
 // declaratively construct a build graph that will be executed by an external
 // runner.
@@ -44,6 +44,11 @@ pub fn build(b: *std.Build) void {
     zigxel_lib.module("engine").addImport("common", commonlib.module("common"));
     exe.root_module.addImport("engine", zigxel_lib.module("engine"));
     exe.linkLibC();
+
+    if (builtin.target.os.tag == .linux) {
+        exe.addIncludePath(b.path("../../../linuxbrew/.linuxbrew/include"));
+        exe.linkSystemLibrary("X11");
+    }
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default

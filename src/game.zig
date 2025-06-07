@@ -12,6 +12,8 @@ const GAME_LOG = std.log.scoped(.game);
 pub const Player = player.Player;
 pub const World = world.World(COLOR_TYPE);
 
+pub const TERMINAL_OFFSET = 70;
+
 pub const Game = struct {
     running: bool = true,
     e: Engine(.ascii, COLOR_TYPE) = undefined,
@@ -79,7 +81,7 @@ pub const Game = struct {
     }
     pub fn run(self: *Self) !void {
         self.lock = std.Thread.Mutex{};
-        self.e = try Engine(.ascii, COLOR_TYPE).init(self.allocator);
+        self.e = try Engine(.ascii, COLOR_TYPE).init(self.allocator, TERMINAL_OFFSET);
         GAME_LOG.info("starting height {d}\n", .{self.e.renderer.terminal.size.height});
         self.window.is_ascii = true;
         try self.window.rect(@intCast(self.e.renderer.terminal.size.width), @intCast(self.e.renderer.terminal.size.height), 0, 0, 0, 255);
