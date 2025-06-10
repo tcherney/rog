@@ -12,7 +12,8 @@ const GAME_LOG = std.log.scoped(.game);
 pub const Player = player.Player;
 pub const World = world.World(COLOR_TYPE);
 
-pub const TERMINAL_OFFSET = 70;
+const TERMINAL_HEIGHT_OFFSET = 70;
+const TERMINAL_WIDTH_OFFSET = 30;
 
 pub const Game = struct {
     running: bool = true,
@@ -81,11 +82,11 @@ pub const Game = struct {
     }
     pub fn run(self: *Self) !void {
         self.lock = std.Thread.Mutex{};
-        self.e = try Engine(.ascii, COLOR_TYPE).init(self.allocator, TERMINAL_OFFSET);
+        self.e = try Engine(.ascii, COLOR_TYPE).init(self.allocator, TERMINAL_WIDTH_OFFSET, TERMINAL_HEIGHT_OFFSET);
         GAME_LOG.info("starting height {d}\n", .{self.e.renderer.terminal.size.height});
         self.window.is_ascii = true;
         try self.window.rect(@intCast(self.e.renderer.terminal.size.width), @intCast(self.e.renderer.terminal.size.height), 0, 0, 0, 255);
-        try self.world.generate(@intCast(self.e.renderer.terminal.size.width), @intCast(self.e.renderer.terminal.size.height / 2));
+        try self.world.generate(@intCast(self.e.renderer.terminal.size.width), @intCast(self.e.renderer.terminal.size.height));
         self.player = Player(COLOR_TYPE).init();
         self.player.x = @intCast(@as(i64, @bitCast(self.world.get_current_map().start_chunks.items[0].chunk_info.x)));
         self.player.y = @intCast(@as(i64, @bitCast(self.world.get_current_map().start_chunks.items[0].chunk_info.y)));

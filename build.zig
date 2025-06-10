@@ -45,10 +45,7 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("engine", zigxel_lib.module("engine"));
     exe.linkLibC();
 
-    if (builtin.target.os.tag == .linux) {
-        exe.addIncludePath(b.path("../../../linuxbrew/.linuxbrew/include"));
-        exe.linkSystemLibrary("X11");
-    }
+    exe.linkLibrary(zigxel_lib.artifact("libzigxel"));
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
