@@ -14,6 +14,8 @@ const Rectangle = common.Rectangle;
 const rand = std.crypto.random;
 const Point = common.Point(2, usize);
 const Colors = common.Colors;
+const MAP_LOG = std.log.scoped(.map);
+
 const TEXT_COLOR = Colors.WHITE;
 
 pub const MapExit = struct {
@@ -72,7 +74,7 @@ pub const MapChunk = struct {
         self.height = rand.intRangeAtMost(usize, 3, lower_bounds);
         self.x = rand.intRangeAtMost(usize, 0, map_width - self.width);
         self.y = rand.intRangeAtMost(usize, 0, map_height - self.height);
-        std.debug.print("Building new room at x: {d},y: {d} with width: {d} and height: {d}\n", .{ self.x, self.y, self.width, self.height });
+        MAP_LOG.info("Building new room at x: {d},y: {d} with width: {d} and height: {d}\n", .{ self.x, self.y, self.width, self.height });
         self.tiles = try self.allocator.alloc(Tile, self.width * self.height);
         for (0..self.height) |i| {
             for (0..self.width) |j| {
@@ -257,16 +259,16 @@ pub fn Map(comptime color_type: ColorMode) type {
             }
             var lower_bounds_width: usize = 3;
             var lower_bounds_height: usize = 3;
-            std.debug.print("\nWorld width: {d}\n", .{width});
-            std.debug.print("\nWorld height: {d}\n", .{height});
+            MAP_LOG.info("\nWorld width: {d}\n", .{width});
+            MAP_LOG.info("\nWorld height: {d}\n", .{height});
             while (self.width % lower_bounds_width != 0) lower_bounds_width += 1;
             while (self.height % lower_bounds_height != 0) lower_bounds_height += 1;
-            std.debug.print("lower width: {d}\n", .{lower_bounds_width});
-            std.debug.print("lower height: {d}\n", .{lower_bounds_height});
+            MAP_LOG.info("lower width: {d}\n", .{lower_bounds_width});
+            MAP_LOG.info("lower height: {d}\n", .{lower_bounds_height});
             const chunk_width = self.width / lower_bounds_width;
             const chunk_height = self.height / lower_bounds_height;
-            std.debug.print("chunk width: {d}\n", .{chunk_width});
-            std.debug.print("chunk height: {d}\n", .{chunk_height});
+            MAP_LOG.info("chunk width: {d}\n", .{chunk_width});
+            MAP_LOG.info("chunk height: {d}\n", .{chunk_height});
             const num_chunks = chunk_width * chunk_height;
             for (0..num_chunks) |i| {
                 var new_chunk = MapChunk.init(self.allocator);
@@ -304,7 +306,7 @@ pub fn Map(comptime color_type: ColorMode) type {
                     var curr_y: usize = r1_center.y;
                     var curr_x: usize = r1_center.x;
                     if (vertical) {
-                        std.debug.print("From room {d} to {d} going vertical first", .{ k, k + 1 });
+                        MAP_LOG.info("From room {d} to {d} going vertical first", .{ k, k + 1 });
                         if (r2_center.y > r1_center.y) {
                             curr_y = r1.y + r1.height - 1;
                             while (curr_y <= r2_center.y) : (curr_y += 1) {
@@ -334,7 +336,7 @@ pub fn Map(comptime color_type: ColorMode) type {
                             }
                         }
                     } else {
-                        std.debug.print("From room {d} to {d} going horizontal first", .{ k, k + 1 });
+                        MAP_LOG.info("From room {d} to {d} going horizontal first", .{ k, k + 1 });
                         if (r2_center.x > r1_center.x) {
                             curr_x = r1.x + r1.width - 1;
                             while (curr_x <= r2_center.x) : (curr_x += 1) {
@@ -442,7 +444,7 @@ pub fn Map(comptime color_type: ColorMode) type {
                     var curr_y: usize = r1_center.y;
                     var curr_x: usize = r1_center.x;
                     if (vertical) {
-                        std.debug.print("From room {d} to {d} going vertical first", .{ k, k + 1 });
+                        MAP_LOG.info("From room {d} to {d} going vertical first", .{ k, k + 1 });
                         if (r2_center.y > r1_center.y) {
                             curr_y = r1.y + r1.height - 1;
                             while (curr_y <= r2_center.y) : (curr_y += 1) {
@@ -484,7 +486,7 @@ pub fn Map(comptime color_type: ColorMode) type {
                             }
                         }
                     } else {
-                        std.debug.print("From room {d} to {d} going horizontal first", .{ k, k + 1 });
+                        MAP_LOG.info("From room {d} to {d} going horizontal first", .{ k, k + 1 });
                         if (r2_center.x > r1_center.x) {
                             curr_x = r1.x + r1.width - 1;
                             while (curr_x <= r2_center.x) : (curr_x += 1) {

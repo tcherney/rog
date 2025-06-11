@@ -12,6 +12,7 @@ const Texture = engine.Texture;
 const Pixel = common.Pixel;
 const rand = std.crypto.random;
 pub var scratch_buffer: [32]u8 = undefined;
+const WORLD_LOG = std.log.scoped(.world);
 //TODO move out to a constants/config file
 const TEXT_COLOR = common.Colors.WHITE;
 
@@ -117,14 +118,14 @@ pub fn World(comptime color_type: ColorMode) type {
             }
             //connect the dungeons
             const num_overworld_chunks = self.map_cols[0].maps[self.map_cols[0].current_map].chunks.items.len;
-            std.debug.print("num overworld chunks {d}\n", .{num_overworld_chunks});
+            WORLD_LOG.info("num overworld chunks {d}\n", .{num_overworld_chunks});
             for (1..self.map_cols.len) |i| {
                 var chunk_id = rand.intRangeAtMost(usize, 0, num_overworld_chunks - 1);
-                std.debug.print("chunk id before {d}\n", .{chunk_id});
+                WORLD_LOG.info("chunk id before {d}\n", .{chunk_id});
                 while (self.map_cols[0].maps[self.map_cols[0].current_map].chunks.items[chunk_id].tiles[0].symbol == map.ForestTiles.EXIT.symbol) {
                     chunk_id = rand.intRangeAtMost(usize, 0, num_overworld_chunks - 1);
                 }
-                std.debug.print("chunk id after {d}\n", .{chunk_id});
+                WORLD_LOG.info("chunk id after {d}\n", .{chunk_id});
                 const new_exit: MapExit = .{
                     .chunk_info = .{
                         .tile = map.ForestTiles.EXIT,
@@ -172,7 +173,7 @@ pub fn World(comptime color_type: ColorMode) type {
                 for (0..current_map.exit_chunks.items.len) |i| {
                     if (current_map.exit_chunks.items[i].chunk_info.x == x_usize and current_map.exit_chunks.items[i].chunk_info.y == y_usize) {
                         start = &current_map.exit_chunks.items[i];
-                        std.debug.print("Found exit\n", .{});
+                        WORLD_LOG.info("Found exit\n", .{});
                         break;
                     }
                 }
