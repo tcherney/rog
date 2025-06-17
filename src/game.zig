@@ -11,6 +11,7 @@ pub const DungeonMap = map.Map(COLOR_TYPE);
 const GAME_LOG = std.log.scoped(.game);
 pub const Player = player.Player;
 pub const World = world.World(COLOR_TYPE);
+pub const TUI = engine.TUI(.ascii, Game.State);
 
 const TERMINAL_HEIGHT_OFFSET = 70;
 const TERMINAL_WIDTH_OFFSET = 30;
@@ -24,6 +25,13 @@ pub const Game = struct {
     world: World,
     window: engine.Texture,
     player: Player(COLOR_TYPE) = undefined,
+    state: State = .start,
+    tui: TUI,
+    pub const State = enum {
+        game,
+        start,
+        pause,
+    };
     const Self = @This();
     pub const Error = error{} || engine.Error || std.posix.GetRandomError || std.mem.Allocator.Error;
     pub fn init(allocator: std.mem.Allocator) Error!Self {
@@ -31,12 +39,14 @@ pub const Game = struct {
             .allocator = allocator,
             .world = World.init(allocator),
             .window = engine.Texture.init(allocator),
+            .tui = TUI.init(allocator),
         };
     }
     pub fn deinit(self: *Self) Error!void {
         try self.e.deinit();
         self.world.deinit();
         self.window.deinit();
+        self.tui.deinit();
     }
 
     pub fn on_mouse_change(self: *Self, mouse_event: engine.MouseEvent) void {
@@ -53,31 +63,60 @@ pub const Game = struct {
         GAME_LOG.info("{}\n", .{key});
         if (key == engine.KEYS.KEY_q) {
             self.running = false;
-        } else if (key == engine.KEYS.KEY_w) {
-            if (self.player.move(.UP, self.world.get_current_map())) {
-                self.world.validate_player_position(&self.player);
-            }
-        } else if (key == engine.KEYS.KEY_a) {
-            if (self.player.move(.LEFT, self.world.get_current_map())) {
-                self.world.validate_player_position(&self.player);
-            }
-        } else if (key == engine.KEYS.KEY_s) {
-            if (self.player.move(.DOWN, self.world.get_current_map())) {
-                self.world.validate_player_position(&self.player);
-            }
-        } else if (key == engine.KEYS.KEY_d) {
-            if (self.player.move(.RIGHT, self.world.get_current_map())) {
-                self.world.validate_player_position(&self.player);
-            }
         }
+        switch (self.state) {
+            .game => {
+                if (key == engine.KEYS.KEY_w) {
+                    if (self.player.move(.UP, self.world.get_current_map())) {
+                        self.world.validate_player_position(&self.player);
+                    }
+                } else if (key == engine.KEYS.KEY_a) {
+                    if (self.player.move(.LEFT, self.world.get_current_map())) {
+                        self.world.validate_player_position(&self.player);
+                    }
+                } else if (key == engine.KEYS.KEY_s) {
+                    if (self.player.move(.DOWN, self.world.get_current_map())) {
+                        self.world.validate_player_position(&self.player);
+                    }
+                } else if (key == engine.KEYS.KEY_d) {
+                    if (self.player.move(.RIGHT, self.world.get_current_map())) {
+                        self.world.validate_player_position(&self.player);
+                    }
+                } else if (key == engine.KEYS.KEY_ESC) {
+                    self.state = .pause;
+                }
+            },
+            .start => {
+                if (key == engine.KEYS.KEY_SPACE) {
+                    self.state = .game;
+                }
+            },
+            .pause => {
+                if (key == engine.KEYS.KEY_ESC) {
+                    self.state = .game;
+                }
+            },
+        }
+    }
+
+    pub fn on_start_clicked(self: *Self) void {
+        self.state = .game;
     }
 
     pub fn on_render(self: *Self, dt: u64) !void {
         self.e.renderer.set_bg(0, 0, 0, self.window);
         _ = dt;
-        try self.world.draw(0, 0, &self.e.renderer, self.window);
-        self.player.draw(&self.e.renderer, self.window);
-        //GAME_LOG.info("color buffer {any}\n ascii buffer {any}", .{ self.window.pixel_buffer, self.window.ascii_buffer });
+        switch (self.state) {
+            .game => {
+                try self.world.draw(0, 0, &self.e.renderer, self.window);
+                self.player.draw(&self.e.renderer, self.window);
+                //GAME_LOG.info("color buffer {any}\n ascii buffer {any}", .{ self.window.pixel_buffer, self.window.ascii_buffer });
+
+            },
+            .start, .pause => {
+                try self.tui.draw(&self.e.renderer, self.window, 0, 0, self.state);
+            },
+        }
         try self.e.renderer.flip(self.window, null);
     }
     pub fn run(self: *Self) !void {
@@ -94,6 +133,9 @@ pub const Game = struct {
         self.e.on_render(Self, on_render, self);
         self.e.on_mouse_change(Self, on_mouse_change, self);
         self.e.on_window_change(Self, on_window_change, self);
+        try self.tui.add_button(self.e.renderer.terminal.size.width / 2, self.e.renderer.terminal.size.height / 2, null, null, common.Colors.WHITE, common.Colors.BLUE, common.Colors.MAGENTA, "Start", .start);
+        self.tui.items.items[self.tui.items.items.len - 1].set_on_click(Self, on_start_clicked, self);
+        try self.tui.add_button(self.e.renderer.terminal.size.width / 2, self.e.renderer.terminal.size.height / 2, null, null, common.Colors.WHITE, common.Colors.BLUE, common.Colors.MAGENTA, "Pause", .pause);
         self.e.set_fps(60);
         try common.gen_rand();
         try self.e.start();
