@@ -5,26 +5,25 @@ const map = @import("map.zig");
 const player = @import("player.zig");
 const world = @import("world.zig");
 
-pub const COLOR_TYPE = .color_true;
 pub const Engine = engine.Engine;
-pub const DungeonMap = map.Map(COLOR_TYPE);
+pub const DungeonMap = map.Map;
 const GAME_LOG = std.log.scoped(.game);
 pub const Player = player.Player;
-pub const World = world.World(COLOR_TYPE);
-pub const TUI = engine.TUI(.ascii, Game.State);
+pub const World = world.World;
+pub const TUI = engine.TUI(Game.State);
 
 const TERMINAL_HEIGHT_OFFSET = 70;
 const TERMINAL_WIDTH_OFFSET = 30;
 
 pub const Game = struct {
     running: bool = true,
-    e: Engine(.ascii, COLOR_TYPE) = undefined,
+    e: Engine = undefined,
     allocator: std.mem.Allocator = undefined,
     frame_limit: u64 = 16_666_667,
     lock: std.Thread.Mutex = undefined,
     world: World,
     window: engine.Texture,
-    player: Player(COLOR_TYPE) = undefined,
+    player: Player = undefined,
     state: State = .start,
     tui: TUI,
     pub const State = enum {
@@ -39,7 +38,7 @@ pub const Game = struct {
             .allocator = allocator,
             .world = World.init(allocator),
             .window = engine.Texture.init(allocator),
-            .tui = TUI.init(allocator),
+            .tui = TUI.init(allocator, .ascii),
         };
     }
     pub fn deinit(self: *Self) Error!void {
@@ -104,12 +103,12 @@ pub const Game = struct {
     }
 
     pub fn on_render(self: *Self, dt: u64) !void {
-        self.e.renderer.set_bg(0, 0, 0, self.window);
+        self.e.renderer.ascii.set_bg(0, 0, 0, self.window);
         _ = dt;
         switch (self.state) {
             .game => {
-                try self.world.draw(0, 0, &self.e.renderer, self.window);
-                self.player.draw(&self.e.renderer, self.window);
+                try self.world.draw(0, 0, &self.e.renderer.ascii, self.window);
+                self.player.draw(&self.e.renderer.ascii, self.window);
                 //GAME_LOG.info("color buffer {any}\n ascii buffer {any}", .{ self.window.pixel_buffer, self.window.ascii_buffer });
 
             },
@@ -117,25 +116,25 @@ pub const Game = struct {
                 try self.tui.draw(&self.e.renderer, self.window, 0, 0, self.state);
             },
         }
-        try self.e.renderer.flip(self.window, null);
+        try self.e.renderer.ascii.flip(self.window, null);
     }
     pub fn run(self: *Self) !void {
         self.lock = std.Thread.Mutex{};
-        self.e = try Engine(.ascii, COLOR_TYPE).init(self.allocator, TERMINAL_WIDTH_OFFSET, TERMINAL_HEIGHT_OFFSET);
-        GAME_LOG.info("starting height {d}\n", .{self.e.renderer.terminal.size.height});
+        self.e = try Engine.init(self.allocator, TERMINAL_WIDTH_OFFSET, TERMINAL_HEIGHT_OFFSET, .ascii, ._2d, .color_true);
+        GAME_LOG.info("starting height {d}\n", .{self.e.renderer.ascii.terminal.size.height});
         self.window.is_ascii = true;
-        try self.window.rect(@intCast(self.e.renderer.terminal.size.width), @intCast(self.e.renderer.terminal.size.height), 0, 0, 0, 255);
-        try self.world.generate(@intCast(self.e.renderer.terminal.size.width), @intCast(self.e.renderer.terminal.size.height));
-        self.player = Player(COLOR_TYPE).init();
+        try self.window.rect(@intCast(self.e.renderer.ascii.terminal.size.width), @intCast(self.e.renderer.ascii.terminal.size.height), 0, 0, 0, 255);
+        try self.world.generate(@intCast(self.e.renderer.ascii.terminal.size.width), @intCast(self.e.renderer.ascii.terminal.size.height));
+        self.player = Player.init();
         self.player.x = @intCast(@as(i64, @bitCast(self.world.get_current_map().start_chunks.items[0].chunk_info.x)));
         self.player.y = @intCast(@as(i64, @bitCast(self.world.get_current_map().start_chunks.items[0].chunk_info.y)));
         self.e.on_key_down(Self, on_key_down, self);
         self.e.on_render(Self, on_render, self);
         self.e.on_mouse_change(Self, on_mouse_change, self);
         self.e.on_window_change(Self, on_window_change, self);
-        try self.tui.add_button(self.e.renderer.terminal.size.width / 2, self.e.renderer.terminal.size.height / 2, null, null, common.Colors.WHITE, common.Colors.BLUE, common.Colors.MAGENTA, "Start", .start);
+        try self.tui.add_button(self.e.renderer.ascii.terminal.size.width / 2, self.e.renderer.ascii.terminal.size.height / 2, null, null, common.Colors.WHITE, common.Colors.BLUE, common.Colors.MAGENTA, "Start", .start);
         self.tui.items.items[self.tui.items.items.len - 1].set_on_click(Self, on_start_clicked, self);
-        try self.tui.add_button(self.e.renderer.terminal.size.width / 2, self.e.renderer.terminal.size.height / 2, null, null, common.Colors.WHITE, common.Colors.BLUE, common.Colors.MAGENTA, "Pause", .pause);
+        try self.tui.add_button(self.e.renderer.ascii.terminal.size.width / 2, self.e.renderer.ascii.terminal.size.height / 2, null, null, common.Colors.WHITE, common.Colors.BLUE, common.Colors.MAGENTA, "Pause", .pause);
         self.e.set_fps(60);
         try common.gen_rand();
         try self.e.start();
