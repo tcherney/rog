@@ -33,19 +33,16 @@ pub fn build(b: *std.Build) void {
         .root_module = exe_mod,
     });
     const imglib = b.dependency("imglib", .{});
-    exe.root_module.addImport("image", imglib.module("image"));
     const termlib = b.dependency("terminal", .{});
-    exe.root_module.addImport("term", termlib.module("term"));
     const commonlib = b.dependency("common", .{});
-    exe.root_module.addImport("common", commonlib.module("common"));
     const zigxel_lib = b.dependency("engine", .{});
-    zigxel_lib.module("engine").addImport("image", imglib.module("image"));
-    zigxel_lib.module("engine").addImport("term", termlib.module("term"));
-    zigxel_lib.module("engine").addImport("common", commonlib.module("common"));
+
+    exe.root_module.addImport("image", imglib.module("image"));
+    exe.root_module.addImport("common", commonlib.module("common"));
     exe.root_module.addImport("engine", zigxel_lib.module("engine"));
-    exe.linkLibC();
 
     exe.linkLibrary(zigxel_lib.artifact("libzigxel"));
+    exe.root_module.addImport("term", termlib.module("term"));
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
