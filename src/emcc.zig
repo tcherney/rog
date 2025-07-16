@@ -138,6 +138,7 @@ pub const EmsdkWrapper = struct {
     pub const EmscriptenMouseEvent = c.EmscriptenMouseEvent;
     pub const EmscriptenWheelEvent = c.EmscriptenWheelEvent;
     pub const EmscriptenTouchEvent = c.EmscriptenTouchEvent;
+    pub const EmscriptenKeyboardEvent = c.EmscriptenKeyboardEvent;
     pub extern fn emscripten_set_main_loop(*const fn () callconv(.C) void, c_int, c_int) void;
     pub extern fn emscripten_set_main_loop_arg(*const fn (*anyopaque) callconv(.C) void, *anyopaque, c_int, c_int) void;
     pub extern fn emscripten_sleep(c_uint) void;
@@ -173,5 +174,11 @@ pub const EmsdkWrapper = struct {
         //_ = target;
         //const window: [*:0]const u8 = @ptrFromInt(2);
         return c.emscripten_set_wheel_callback(target, ctx, use_capture, handler);
+    }
+
+    pub fn emscripten_set_keydown_callback(target: [*:0]const u8, ctx: *anyopaque, use_capture: bool, handler: ?*const fn (c_int, ?*const EmscriptenKeyboardEvent, ?*anyopaque) callconv(.C) bool) c_int {
+        //_ = target;
+        //const window: [*:0]const u8 = @ptrFromInt(2);
+        return c.emscripten_set_keydown_callback(target, ctx, use_capture, handler);
     }
 };

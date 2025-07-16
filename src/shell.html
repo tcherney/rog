@@ -54,7 +54,8 @@
       #output-container {
         position: relative;
         width: 1350px;
-        height: 607px;
+        height: 595px;
+        z-index: 1001;
       }
 
       #output {
@@ -169,7 +170,6 @@
         scrollOnUserInput: false,
       });
       term.open(document.getElementById("output"));
-
       var Module = {
         print: (function () {
           return (...args) => {

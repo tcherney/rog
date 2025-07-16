@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const game = @import("game.zig");
 pub const std_options: std.Options = .{
     .log_level = .err,
@@ -25,11 +26,16 @@ pub fn myLogFn(
 }
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
+    var allocator: std.mem.Allocator = undefined;
+    if (builtin.os.tag == .emscripten) {
+        allocator = std.heap.c_allocator;
+    } else {
+        allocator = gpa.allocator();
+    }
     var app = try game.Game.init(allocator);
     try app.run();
     try app.deinit();
-    if (gpa.deinit() == .leak) {
+    if (builtin.os.tag != .emscripten and gpa.deinit() == .leak) {
         std.log.warn("Leaked!\n", .{});
     }
 }

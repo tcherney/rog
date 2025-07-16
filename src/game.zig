@@ -1,9 +1,11 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const engine = @import("engine");
 const common = @import("common");
 const map = @import("map.zig");
 const player = @import("player.zig");
 const world = @import("world.zig");
+const emcc = @import("emcc.zig");
 
 pub const Engine = engine.Engine;
 pub const DungeonMap = map.Map;
@@ -65,33 +67,33 @@ pub const Game = struct {
         }
         switch (self.state) {
             .game => {
-                if (key == engine.KEYS.KEY_w) {
+                if (key == .KEY_w or key == .KEY_W) {
                     if (self.player.move(.UP, self.world.get_current_map())) {
                         self.world.validate_player_position(&self.player);
                     }
-                } else if (key == engine.KEYS.KEY_a) {
+                } else if (key == .KEY_a or key == .KEY_A) {
                     if (self.player.move(.LEFT, self.world.get_current_map())) {
                         self.world.validate_player_position(&self.player);
                     }
-                } else if (key == engine.KEYS.KEY_s) {
+                } else if (key == .KEY_s or key == .KEY_S) {
                     if (self.player.move(.DOWN, self.world.get_current_map())) {
                         self.world.validate_player_position(&self.player);
                     }
-                } else if (key == engine.KEYS.KEY_d) {
+                } else if (key == .KEY_d or key == .KEY_D) {
                     if (self.player.move(.RIGHT, self.world.get_current_map())) {
                         self.world.validate_player_position(&self.player);
                     }
-                } else if (key == engine.KEYS.KEY_ESC) {
+                } else if (key == .KEY_ESC) {
                     self.state = .pause;
                 }
             },
             .start => {
-                if (key == engine.KEYS.KEY_SPACE) {
+                if (key == .KEY_SPACE) {
                     self.state = .game;
                 }
             },
             .pause => {
-                if (key == engine.KEYS.KEY_ESC) {
+                if (key == .KEY_ESC) {
                     self.state = .game;
                 }
             },
@@ -118,16 +120,25 @@ pub const Game = struct {
         }
         try self.e.renderer.ascii.flip(self.window, null);
     }
+
+    pub fn em_key_handler(event_type: c_int, event: ?*const emcc.EmsdkWrapper.EmscriptenKeyboardEvent, ctx: ?*anyopaque) callconv(.C) bool {
+        std.debug.print("event_type {any}\n", .{event_type});
+        std.debug.print("event {any}\n", .{event});
+        const self: *Self = @ptrCast(@alignCast(ctx));
+        self.on_key_down(@enumFromInt(event.?.which));
+        return true;
+    }
+
     pub fn run(self: *Self) !void {
         self.lock = std.Thread.Mutex{};
-        self.e = try Engine.init(self.allocator, TERMINAL_WIDTH_OFFSET, TERMINAL_HEIGHT_OFFSET, .ascii, ._2d, .color_true, .native);
+        self.e = try Engine.init(self.allocator, TERMINAL_WIDTH_OFFSET, TERMINAL_HEIGHT_OFFSET, .ascii, ._2d, .color_true, if (builtin.os.tag == .emscripten) .wasm else .native, if (builtin.os.tag == .emscripten) .single else .multi);
         GAME_LOG.info("starting height {d}\n", .{self.e.renderer.ascii.terminal.size.height});
         self.window.is_ascii = true;
         try self.window.rect(@intCast(self.e.renderer.ascii.terminal.size.width), @intCast(self.e.renderer.ascii.terminal.size.height), 0, 0, 0, 255);
         try self.world.generate(@intCast(self.e.renderer.ascii.terminal.size.width), @intCast(self.e.renderer.ascii.terminal.size.height));
         self.player = Player.init();
-        self.player.x = @intCast(@as(i64, @bitCast(self.world.get_current_map().start_chunks.items[0].chunk_info.x)));
-        self.player.y = @intCast(@as(i64, @bitCast(self.world.get_current_map().start_chunks.items[0].chunk_info.y)));
+        self.player.x = @as(i32, @bitCast(self.world.get_current_map().start_chunks.items[0].chunk_info.x));
+        self.player.y = @as(i32, @bitCast(self.world.get_current_map().start_chunks.items[0].chunk_info.y));
         self.e.on_key_down(Self, on_key_down, self);
         self.e.on_render(Self, on_render, self);
         self.e.on_mouse_change(Self, on_mouse_change, self);
@@ -139,6 +150,11 @@ pub const Game = struct {
         try common.gen_rand();
         try self.e.start();
 
+        if (builtin.os.tag == .emscripten) {
+            const res = emcc.EmsdkWrapper.emscripten_set_keydown_callback("body", self, true, em_key_handler);
+            std.debug.print("handler set {d}\n", .{res});
+        }
+
         var timer: std.time.Timer = try std.time.Timer.start();
         var delta: u64 = 0;
         while (self.running) {
@@ -146,12 +162,18 @@ pub const Game = struct {
             timer.reset();
             self.lock.lock();
             self.player.update(delta);
+
             self.lock.unlock();
             delta = timer.read();
             timer.reset();
-            const time_to_sleep: i64 = @as(i64, @bitCast(self.frame_limit)) - @as(i64, @bitCast(delta));
-            if (time_to_sleep > 0) {
-                std.time.sleep(@as(u64, @bitCast(time_to_sleep)));
+            if (builtin.os.tag == .emscripten) {
+                try self.on_render(delta);
+                emcc.EmsdkWrapper.emscripten_sleep(16);
+            } else {
+                const time_to_sleep: i64 = @as(i64, @bitCast(self.frame_limit)) - @as(i64, @bitCast(delta));
+                if (time_to_sleep > 0) {
+                    std.time.sleep(@as(u64, @bitCast(time_to_sleep)));
+                }
             }
         }
     }

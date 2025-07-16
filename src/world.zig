@@ -77,7 +77,7 @@ pub const World = struct {
             try self.maps[self.current_map].draw(x, y, floor_offset, renderer, dest);
             // draw last to keep on top
             for (0..self.name.len) |i| {
-                const x_i32: i32 = @intCast(@as(i64, @bitCast(name_offset + i)));
+                const x_i32: i32 = @bitCast(name_offset + i);
                 const y_i32: i32 = 0;
                 renderer.draw_symbol(x_i32, y_i32, self.name[i], TEXT_COLOR, dest);
             }
@@ -147,8 +147,8 @@ pub const World = struct {
         //TODO instead, handle map edge transitions
         if (p.x < 0) p.x = 0;
         if (p.y < 0) p.y = 0;
-        if (p.x >= @as(i32, @intCast(@as(i64, @bitCast(current_map.width))))) p.x = @as(i32, @intCast(@as(i64, @bitCast(current_map.width - 1))));
-        if (p.y >= @as(i32, @intCast(@as(i64, @bitCast(current_map.height))))) p.y = @as(i32, @intCast(@as(i64, @bitCast(current_map.height - 1))));
+        if (p.x >= @as(i32, @bitCast(current_map.width))) p.x = @as(i32, @bitCast(current_map.width - 1));
+        if (p.y >= @as(i32, @bitCast(current_map.height))) p.y = @as(i32, @bitCast(current_map.height - 1));
         if (current_map.at_start(p.x, p.y)) {
             var exit: *MapExit = undefined;
             const x_usize: usize = @intCast(@as(u32, @bitCast(p.x)));
@@ -161,8 +161,8 @@ pub const World = struct {
             if (exit.connected) {
                 self.current_map_col = exit.ext_map_col_indx;
                 self.map_cols[self.current_map_col].current_map = exit.ext_map_indx;
-                p.x = @intCast(@as(i64, @bitCast(exit.ext_chunk_info.x)));
-                p.y = @intCast(@as(i64, @bitCast(exit.ext_chunk_info.y)));
+                p.x = @bitCast(exit.ext_chunk_info.x);
+                p.y = @bitCast(exit.ext_chunk_info.y);
             }
         } else if (current_map.at_exit(p.x, p.y)) {
             var start: *MapExit = undefined;
@@ -178,8 +178,8 @@ pub const World = struct {
             if (start.connected) {
                 self.current_map_col = start.ext_map_col_indx;
                 self.map_cols[self.current_map_col].current_map = start.ext_map_indx;
-                p.x = @intCast(@as(i64, @bitCast(start.ext_chunk_info.x)));
-                p.y = @intCast(@as(i64, @bitCast(start.ext_chunk_info.y)));
+                p.x = @bitCast(start.ext_chunk_info.x);
+                p.y = @bitCast(start.ext_chunk_info.y);
             }
         }
     }
