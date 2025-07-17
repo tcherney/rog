@@ -122,8 +122,8 @@ pub const Game = struct {
     }
 
     pub fn em_key_handler(event_type: c_int, event: ?*const emcc.EmsdkWrapper.EmscriptenKeyboardEvent, ctx: ?*anyopaque) callconv(.C) bool {
-        std.debug.print("event_type {any}\n", .{event_type});
-        std.debug.print("event {any}\n", .{event});
+        GAME_LOG.info("event_type {any}\n", .{event_type});
+        GAME_LOG.info("event {any}\n", .{event});
         const self: *Self = @ptrCast(@alignCast(ctx));
         self.on_key_down(@enumFromInt(event.?.which));
         return true;
@@ -152,7 +152,7 @@ pub const Game = struct {
 
         if (builtin.os.tag == .emscripten) {
             const res = emcc.EmsdkWrapper.emscripten_set_keydown_callback("body", self, true, em_key_handler);
-            std.debug.print("handler set {d}\n", .{res});
+            GAME_LOG.info("handler set {d}\n", .{res});
         }
 
         var timer: std.time.Timer = try std.time.Timer.start();

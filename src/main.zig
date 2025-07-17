@@ -5,9 +5,9 @@ pub const std_options: std.Options = .{
     .log_level = .err,
     .logFn = myLogFn,
     .log_scope_levels = &[_]std.log.ScopeLevel{
-        .{ .scope = .game, .level = .info },
-        .{ .scope = .world, .level = .info },
-        .{ .scope = .map, .level = .info },
+        .{ .scope = .game, .level = .err },
+        .{ .scope = .world, .level = .err },
+        .{ .scope = .map, .level = .err },
     },
 };
 
