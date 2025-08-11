@@ -12,6 +12,8 @@ const Pixel = common.Pixel;
 const rand = std.crypto.random;
 pub var scratch_buffer: [32]u8 = undefined;
 const WORLD_LOG = std.log.scoped(.world);
+pub const IndexType = map.IndexType;
+pub const IndexTypeI = map.IndexTypeI;
 //TODO move out to a constants/config file
 const TEXT_COLOR = common.Colors.WHITE;
 
@@ -67,7 +69,7 @@ pub const World = struct {
                 self.maps[i].start_chunks.items[0].connect_chunks(&self.maps[i - 1].exit_chunks.items[0], i, i - 1, indx, indx);
             }
         }
-        pub fn draw(self: *MapCollection, x: i32, y: i32, renderer: *AsciiRenderer, dest: ?Texture) Error!void {
+        pub fn draw(self: *MapCollection, x: IndexTypeI, y: IndexTypeI, renderer: *AsciiRenderer, dest: ?Texture) Error!void {
             // calc offsets
             const window_center = renderer.terminal.size.width / 2;
             const name_center = self.name.len / 2;
@@ -77,9 +79,9 @@ pub const World = struct {
             try self.maps[self.current_map].draw(x, y, floor_offset, renderer, dest);
             // draw last to keep on top
             for (0..self.name.len) |i| {
-                const x_i32: i32 = @bitCast(name_offset + i);
-                const y_i32: i32 = 0;
-                renderer.draw_symbol(x_i32, y_i32, self.name[i], TEXT_COLOR, dest);
+                const x_IndexTypeI: IndexTypeI = @bitCast(name_offset + i);
+                const y_IndexTypeI: IndexTypeI = 0;
+                renderer.draw_symbol(@intCast(x_IndexTypeI), @intCast(y_IndexTypeI), self.name[i], TEXT_COLOR, dest);
             }
         }
     };
@@ -138,8 +140,8 @@ pub const World = struct {
         }
     }
 
-    pub fn draw(self: *Self, x: i32, y: i32, renderer: *AsciiRenderer, dest: ?Texture) Error!void {
-        try self.map_cols[self.current_map_col].draw(x, y, renderer, dest);
+    pub fn draw(self: *Self, x: IndexTypeI, y: IndexTypeI, renderer: *AsciiRenderer, dest: ?Texture) Error!void {
+        try self.map_cols[self.current_map_col].draw(@intCast(x), @intCast(y), renderer, dest);
     }
 
     pub fn validate_player_position(self: *Self, p: *Player) void {
@@ -147,12 +149,12 @@ pub const World = struct {
         //TODO instead, handle map edge transitions
         if (p.x < 0) p.x = 0;
         if (p.y < 0) p.y = 0;
-        if (p.x >= @as(i32, @bitCast(current_map.width))) p.x = @as(i32, @bitCast(current_map.width - 1));
-        if (p.y >= @as(i32, @bitCast(current_map.height))) p.y = @as(i32, @bitCast(current_map.height - 1));
+        if (p.x >= @as(IndexTypeI, @bitCast(current_map.width))) p.x = @as(IndexTypeI, @bitCast(current_map.width - 1));
+        if (p.y >= @as(IndexTypeI, @bitCast(current_map.height))) p.y = @as(IndexTypeI, @bitCast(current_map.height - 1));
         if (current_map.at_start(p.x, p.y)) {
             var exit: *MapExit = undefined;
-            const x_usize: usize = @intCast(@as(u32, @bitCast(p.x)));
-            const y_usize: usize = @intCast(@as(u32, @bitCast(p.y)));
+            const x_usize: usize = @intCast(@as(IndexType, @bitCast(p.x)));
+            const y_usize: usize = @intCast(@as(IndexType, @bitCast(p.y)));
             for (0..current_map.start_chunks.items.len) |i| {
                 if (current_map.start_chunks.items[i].chunk_info.x == x_usize and current_map.start_chunks.items[i].chunk_info.y == y_usize) {
                     exit = &current_map.start_chunks.items[i];
@@ -166,8 +168,8 @@ pub const World = struct {
             }
         } else if (current_map.at_exit(p.x, p.y)) {
             var start: *MapExit = undefined;
-            const x_usize: usize = @intCast(@as(u32, @bitCast(p.x)));
-            const y_usize: usize = @intCast(@as(u32, @bitCast(p.y)));
+            const x_usize: usize = @intCast(@as(IndexType, @bitCast(p.x)));
+            const y_usize: usize = @intCast(@as(IndexType, @bitCast(p.y)));
             for (0..current_map.exit_chunks.items.len) |i| {
                 if (current_map.exit_chunks.items[i].chunk_info.x == x_usize and current_map.exit_chunks.items[i].chunk_info.y == y_usize) {
                     start = &current_map.exit_chunks.items[i];

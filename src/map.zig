@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const engine = @import("engine");
 const common = @import("common");
 pub const MapType = enum {
@@ -11,21 +12,25 @@ const AsciiRenderer = engine.graphics.AsciiRenderer;
 const Texture = engine.Texture;
 const Rectangle = common.Rectangle;
 const rand = std.crypto.random;
-const Point = common.Point(2, u32);
 const Colors = common.Colors;
 const MAP_LOG = std.log.scoped(.map);
+
+pub const WASM: bool = builtin.os.tag == .emscripten or builtin.os.tag == .wasi;
+pub const IndexType = if (WASM) u32 else u64;
+pub const IndexTypeI = if (WASM) i32 else i64;
+const Point = common.Point(2, IndexType);
 
 const TEXT_COLOR = Colors.WHITE;
 
 pub const MapExit = struct {
-    map_indx: u32 = undefined,
-    map_col_indx: u32 = undefined,
+    map_indx: IndexType = undefined,
+    map_col_indx: IndexType = undefined,
     chunk_info: MapTile,
-    ext_map_indx: u32 = undefined,
-    ext_map_col_indx: u32 = undefined,
+    ext_map_indx: IndexType = undefined,
+    ext_map_col_indx: IndexType = undefined,
     ext_chunk_info: MapTile = undefined,
     connected: bool = false,
-    pub fn connect_chunks(self: *MapExit, other: *MapExit, self_map_indx: u32, other_map_indx: u32, self_map_col_indx: u32, other_map_col_indx: u32) void {
+    pub fn connect_chunks(self: *MapExit, other: *MapExit, self_map_indx: IndexType, other_map_indx: IndexType, self_map_col_indx: IndexType, other_map_col_indx: IndexType) void {
         self.map_indx = self_map_indx;
         self.ext_map_indx = other_map_indx;
         other.map_indx = other_map_indx;
@@ -53,10 +58,10 @@ pub const Tile = struct {
 pub const MapChunk = struct {
     tiles: []Tile = undefined,
     allocator: Allocator,
-    height: u32 = undefined,
-    width: u32 = undefined,
-    x: u32 = undefined,
-    y: u32 = undefined,
+    height: IndexType = undefined,
+    width: IndexType = undefined,
+    x: IndexType = undefined,
+    y: IndexType = undefined,
     pub const Error = error{} || Allocator.Error;
     pub fn init(allocator: Allocator) MapChunk {
         return MapChunk{
@@ -67,12 +72,12 @@ pub const MapChunk = struct {
         self.allocator.free(self.tiles);
     }
     //TODO add methods for different type of chunks
-    pub fn build_room(self: *MapChunk, map_width: u32, map_height: u32, size: u32) Error!void {
+    pub fn build_room(self: *MapChunk, map_width: IndexType, map_height: IndexType, size: IndexType) Error!void {
         const lower_bounds = @max(4, size);
-        self.width = rand.intRangeAtMost(u32, 3, lower_bounds);
-        self.height = rand.intRangeAtMost(u32, 3, lower_bounds);
-        self.x = rand.intRangeAtMost(u32, 0, map_width - self.width);
-        self.y = rand.intRangeAtMost(u32, 0, map_height - self.height);
+        self.width = rand.intRangeAtMost(IndexType, 3, lower_bounds);
+        self.height = rand.intRangeAtMost(IndexType, 3, lower_bounds);
+        self.x = rand.intRangeAtMost(IndexType, 0, map_width - self.width);
+        self.y = rand.intRangeAtMost(IndexType, 0, map_height - self.height);
         MAP_LOG.info("Building new room at x: {d},y: {d} with width: {d} and height: {d}\n", .{ self.x, self.y, self.width, self.height });
         self.tiles = try self.allocator.alloc(Tile, self.width * self.height);
         for (0..self.height) |i| {
@@ -86,7 +91,7 @@ pub const MapChunk = struct {
         }
     }
     //TODO forest chunk generation
-    pub fn build_forest_chunk(self: *MapChunk, width: u32, height: u32, x: u32, y: u32) Error!void {
+    pub fn build_forest_chunk(self: *MapChunk, width: IndexType, height: IndexType, x: IndexType, y: IndexType) Error!void {
         self.width = width;
         self.height = height;
         self.x = x;
@@ -136,15 +141,15 @@ pub const ForestTiles = struct {
 
 pub const MapTile = struct {
     tile: Tile,
-    x: u32,
-    y: u32,
+    x: IndexType,
+    y: IndexType,
 };
 
 pub const Map = struct {
     allocator: Allocator,
     tex: Texture = undefined,
-    width: u32 = undefined,
-    height: u32 = undefined,
+    width: IndexType = undefined,
+    height: IndexType = undefined,
     chunks: std.ArrayList(MapChunk),
     start_chunks: std.ArrayList(MapExit) = undefined,
     exit_chunks: std.ArrayList(MapExit) = undefined,
@@ -189,9 +194,9 @@ pub const Map = struct {
     //     return self.chunk_to_map_coord(exit.chunk_indx, exit.chunk_info.x, exit.chunk_info.y);
     // }
 
-    fn _valid_position(self: *const Self, x: i32, y: i32, TileType: type) bool {
-        const x_usize: u32 = @as(u32, @bitCast(x));
-        const y_usize: u32 = @as(u32, @bitCast(y));
+    fn _valid_position(self: *const Self, x: IndexTypeI, y: IndexTypeI, TileType: type) bool {
+        const x_usize: IndexType = @as(IndexType, @bitCast(x));
+        const y_usize: IndexType = @as(IndexType, @bitCast(y));
         const tile_symbol = self.tex.ascii_buffer[y_usize * self.width + x_usize];
         if (TileType == ForestTiles) {
             return tile_symbol != TileType.TREE.symbol and tile_symbol != TileType.ROCK.symbol and tile_symbol != TileType.WATER.symbol;
@@ -200,35 +205,35 @@ pub const Map = struct {
         }
     }
 
-    pub fn valid_position(self: *const Self, x: i32, y: i32) bool {
-        if (x < 0 or y < 0 or x >= @as(i32, @bitCast(self.width)) or y >= @as(i32, @bitCast(self.height))) return true;
+    pub fn valid_position(self: *const Self, x: IndexTypeI, y: IndexTypeI) bool {
+        if (x < 0 or y < 0 or x >= @as(IndexTypeI, @bitCast(self.width)) or y >= @as(IndexTypeI, @bitCast(self.height))) return true;
         switch (self.map_type) {
             .DUNGEON => return self._valid_position(x, y, DungeonTiles),
             .FOREST => return self._valid_position(x, y, ForestTiles),
         }
     }
 
-    fn _at_tile(self: *const Self, x: i32, y: i32, symbol: u8) bool {
-        const x_usize: u32 = @as(u32, @bitCast(x));
-        const y_usize: u32 = @as(u32, @bitCast(y));
+    fn _at_tile(self: *const Self, x: IndexTypeI, y: IndexTypeI, symbol: u8) bool {
+        const x_usize: IndexType = @as(IndexType, @bitCast(x));
+        const y_usize: IndexType = @as(IndexType, @bitCast(y));
         return self.tex.ascii_buffer[y_usize * self.width + x_usize] == symbol;
     }
 
-    pub fn at_exit(self: *const Self, x: i32, y: i32) bool {
+    pub fn at_exit(self: *const Self, x: IndexTypeI, y: IndexTypeI) bool {
         switch (self.map_type) {
             .DUNGEON => return self._at_tile(x, y, DungeonTiles.EXIT.symbol),
             .FOREST => return self._at_tile(x, y, ForestTiles.EXIT.symbol),
         }
     }
 
-    pub fn at_start(self: *const Self, x: i32, y: i32) bool {
+    pub fn at_start(self: *const Self, x: IndexTypeI, y: IndexTypeI) bool {
         switch (self.map_type) {
             .DUNGEON => return self._at_tile(x, y, DungeonTiles.START.symbol),
             .FOREST => return self._at_tile(x, y, ForestTiles.START.symbol),
         }
     }
 
-    fn _assign_tile(self: *Self, x: u32, y: u32, tile: Tile, overwrite: bool, TileType: type) void {
+    fn _assign_tile(self: *Self, x: IndexType, y: IndexType, tile: Tile, overwrite: bool, TileType: type) void {
         if (!overwrite) {
             if (self.tex.ascii_buffer[y * self.width + x] == TileType.FLOOR.symbol) return;
         }
@@ -237,14 +242,14 @@ pub const Map = struct {
         self.tex.pixel_buffer[y * self.width + x] = tile.color;
     }
 
-    pub fn assign_tile(self: *Self, x: u32, y: u32, tile: Tile, overwrite: bool) void {
+    pub fn assign_tile(self: *Self, x: IndexType, y: IndexType, tile: Tile, overwrite: bool) void {
         switch (self.map_type) {
             .DUNGEON => self._assign_tile(x, y, tile, overwrite, DungeonTiles),
             .FOREST => self._assign_tile(x, y, tile, overwrite, ForestTiles),
         }
     }
 
-    fn _generate_forest(self: *Self, width: u32, height: u32) Error!void {
+    fn _generate_forest(self: *Self, width: IndexType, height: IndexType) Error!void {
         self.tex = Texture.init(self.allocator);
         self.tex.is_ascii = true;
         self.width = width;
@@ -255,8 +260,8 @@ pub const Map = struct {
             self.tex.background_pixel_buffer[i] = ForestTiles.EMPTY.bck_color;
             self.tex.ascii_buffer[i] = ForestTiles.EMPTY.symbol;
         }
-        var lower_bounds_width: u32 = 3;
-        var lower_bounds_height: u32 = 3;
+        var lower_bounds_width: IndexType = 3;
+        var lower_bounds_height: IndexType = 3;
         MAP_LOG.info("\nWorld width: {d}\n", .{width});
         MAP_LOG.info("\nWorld height: {d}\n", .{height});
         while (self.width % lower_bounds_width != 0) lower_bounds_width += 1;
@@ -277,7 +282,7 @@ pub const Map = struct {
         }
         for (0..self.chunks.items.len) |k| {
             const chunk = self.chunks.items[k];
-            var indx: u32 = 0;
+            var indx: IndexType = 0;
             for (chunk.y..chunk.y + chunk.height) |i| {
                 for (chunk.x..chunk.x + chunk.width) |j| {
                     self.assign_tile(j, i, chunk.tiles[indx], true);
@@ -287,13 +292,13 @@ pub const Map = struct {
         }
 
         for (0..self.chunks.items.len) |k| {
-            const road_probability = rand.intRangeAtMost(u32, 1, 20);
+            const road_probability = rand.intRangeAtMost(IndexType, 1, 20);
             if (road_probability != 1) continue;
             if (k < self.chunks.items.len) {
                 //find center of the two rooms
                 const r1 = self.chunks.items[k];
-                var r2_indx: u32 = rand.intRangeAtMost(u32, 0, self.chunks.items.len - 1);
-                while (r2_indx == k) r2_indx = rand.intRangeAtMost(u32, 0, self.chunks.items.len - 1);
+                var r2_indx: IndexType = rand.intRangeAtMost(IndexType, 0, self.chunks.items.len - 1);
+                while (r2_indx == k) r2_indx = rand.intRangeAtMost(IndexType, 0, self.chunks.items.len - 1);
                 const r2 = self.chunks.items[r2_indx];
                 const r1_center: Point = .{ .x = r1.x + r1.width / 2, .y = r1.y + r1.height / 2 };
                 const r2_center: Point = .{ .x = r2.x + r2.width / 2, .y = r2.y + r2.height / 2 };
@@ -301,8 +306,8 @@ pub const Map = struct {
                 var vertical: bool = rand.boolean();
                 if (r1.contains_point(.{ .x = r1.x, .y = r2_center.y })) vertical = false;
                 if (r1.contains_point(.{ .x = r2_center.x, .y = r1.y })) vertical = true;
-                var curr_y: u32 = r1_center.y;
-                var curr_x: u32 = r1_center.x;
+                var curr_y: IndexType = r1_center.y;
+                var curr_x: IndexType = r1_center.x;
                 if (vertical) {
                     MAP_LOG.info("From room {d} to {d} going vertical first", .{ k, k + 1 });
                     if (r2_center.y > r1_center.y) {
@@ -366,8 +371,8 @@ pub const Map = struct {
                 }
             }
         }
-        const x_start = rand.intRangeAtMost(u32, 0, self.width - 1);
-        const y_start = rand.intRangeAtMost(u32, 0, self.height - 1);
+        const x_start = rand.intRangeAtMost(IndexType, 0, self.width - 1);
+        const y_start = rand.intRangeAtMost(IndexType, 0, self.height - 1);
         try self.start_chunks.append(.{
             .chunk_info = .{
                 .tile = ForestTiles.FLOOR,
@@ -381,7 +386,7 @@ pub const Map = struct {
     }
     //TODO add more parameters
     //TODO add generation
-    fn _generate_dungeon(self: *Self, width: u32, height: u32, num_rooms: u32) Error!void {
+    fn _generate_dungeon(self: *Self, width: IndexType, height: IndexType, num_rooms: IndexType) Error!void {
         self.tex = Texture.init(self.allocator);
         self.tex.is_ascii = true;
         self.width = width;
@@ -392,9 +397,9 @@ pub const Map = struct {
             self.tex.background_pixel_buffer[i] = DungeonTiles.EMPTY.bck_color;
             self.tex.ascii_buffer[i] = DungeonTiles.EMPTY.symbol;
         }
-        var cur_object: u32 = 0;
+        var cur_object: IndexType = 0;
         const MAX_ATTEMPTS = 20;
-        var attempt: u32 = 0;
+        var attempt: IndexType = 0;
         //TODO generate forest, probably break down world into patches that are connected with roads, and fill surrounding area with grass/trees
         //TODO will need to figure out how we want to break down the map, might just be a full grid and overwrite areas with connecting roads
         outer: while (cur_object < num_rooms) {
@@ -419,7 +424,7 @@ pub const Map = struct {
         }
         for (0..self.chunks.items.len) |k| {
             const room = self.chunks.items[k];
-            var indx: u32 = 0;
+            var indx: IndexType = 0;
             for (room.y..room.y + room.height) |i| {
                 for (room.x..room.x + room.width) |j| {
                     self.assign_tile(j, i, room.tiles[indx], true);
@@ -439,8 +444,8 @@ pub const Map = struct {
                 var vertical: bool = rand.boolean();
                 if (r1.contains_point(.{ .x = r1.x, .y = r2_center.y })) vertical = false;
                 if (r1.contains_point(.{ .x = r2_center.x, .y = r1.y })) vertical = true;
-                var curr_y: u32 = r1_center.y;
-                var curr_x: u32 = r1_center.x;
+                var curr_y: IndexType = r1_center.y;
+                var curr_x: IndexType = r1_center.x;
                 if (vertical) {
                     MAP_LOG.info("From room {d} to {d} going vertical first", .{ k, k + 1 });
                     if (r2_center.y > r1_center.y) {
@@ -531,14 +536,14 @@ pub const Map = struct {
             }
         }
         // place entrance and exit to map
-        const start_room = rand.intRangeAtMost(u32, 0, num_rooms - 1);
-        const start_room_x = rand.intRangeAtMost(u32, 1, self.chunks.items[start_room].width - 2);
-        const start_room_y = rand.intRangeAtMost(u32, 1, self.chunks.items[start_room].height - 2);
+        const start_room = rand.intRangeAtMost(IndexType, 0, num_rooms - 1);
+        const start_room_x = rand.intRangeAtMost(IndexType, 1, self.chunks.items[start_room].width - 2);
+        const start_room_y = rand.intRangeAtMost(IndexType, 1, self.chunks.items[start_room].height - 2);
 
-        var exit_room = rand.intRangeAtMost(u32, 0, num_rooms - 1);
-        while (exit_room == start_room) exit_room = rand.intRangeAtMost(u32, 0, num_rooms - 1);
-        const exit_room_x = rand.intRangeAtMost(u32, 1, self.chunks.items[exit_room].width - 2);
-        const exit_room_y = rand.intRangeAtMost(u32, 1, self.chunks.items[exit_room].height - 2);
+        var exit_room = rand.intRangeAtMost(IndexType, 0, num_rooms - 1);
+        while (exit_room == start_room) exit_room = rand.intRangeAtMost(IndexType, 0, num_rooms - 1);
+        const exit_room_x = rand.intRangeAtMost(IndexType, 1, self.chunks.items[exit_room].width - 2);
+        const exit_room_y = rand.intRangeAtMost(IndexType, 1, self.chunks.items[exit_room].height - 2);
 
         self.assign_tile(self.chunks.items[start_room].x + start_room_x, self.chunks.items[start_room].y + start_room_y, DungeonTiles.START, true);
         self.assign_tile(self.chunks.items[exit_room].x + exit_room_x, self.chunks.items[exit_room].y + exit_room_y, DungeonTiles.EXIT, true);
@@ -559,7 +564,7 @@ pub const Map = struct {
         });
     }
     //TODO change to kwargs??
-    pub fn generate(self: *Self, width: u32, height: u32, name: []const u8, num_rooms: u32) Error!void {
+    pub fn generate(self: *Self, width: IndexType, height: IndexType, name: []const u8, num_rooms: IndexType) Error!void {
         self.name = try self.allocator.dupe(u8, name);
         switch (self.map_type) {
             .DUNGEON => try self._generate_dungeon(width, height, num_rooms),
@@ -567,12 +572,12 @@ pub const Map = struct {
         }
     }
 
-    pub fn draw(self: *Self, x: i32, y: i32, name_offset: u32, renderer: *AsciiRenderer, dest: ?Texture) Error!void {
-        try renderer.draw_texture(self.tex, .{ .x = 0, .y = 0, .width = self.tex.width, .height = self.tex.height }, .{ .x = x, .y = y, .width = self.tex.width, .height = self.tex.height }, dest);
+    pub fn draw(self: *Self, x: IndexTypeI, y: IndexTypeI, name_offset: IndexType, renderer: *AsciiRenderer, dest: ?Texture) Error!void {
+        try renderer.draw_texture(self.tex, .{ .x = 0, .y = 0, .width = self.tex.width, .height = self.tex.height }, .{ .x = @intCast(x), .y = @intCast(y), .width = self.tex.width, .height = self.tex.height }, dest);
         for (0..self.name.len) |i| {
-            const x_i32: i32 = @bitCast(name_offset + i);
-            const y_i32: i32 = 0;
-            renderer.draw_symbol(x_i32, y_i32, self.name[i], TEXT_COLOR, dest);
+            const x_IndexTypeI: IndexTypeI = @bitCast(name_offset + i);
+            const y_IndexTypeI: IndexTypeI = 0;
+            renderer.draw_symbol(@intCast(x_IndexTypeI), @intCast(y_IndexTypeI), self.name[i], TEXT_COLOR, dest);
         }
     }
 };

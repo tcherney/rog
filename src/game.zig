@@ -14,6 +14,8 @@ pub const Player = player.Player;
 pub const World = world.World;
 pub const TUI = engine.TUI(Game.State);
 
+pub const IndexType = map.IndexType;
+pub const IndexTypeI = map.IndexTypeI;
 const TERMINAL_HEIGHT_OFFSET = 70;
 const TERMINAL_WIDTH_OFFSET = 30;
 
@@ -137,8 +139,8 @@ pub const Game = struct {
         try self.window.rect(@intCast(self.e.renderer.ascii.terminal.size.width), @intCast(self.e.renderer.ascii.terminal.size.height), 0, 0, 0, 255);
         try self.world.generate(@intCast(self.e.renderer.ascii.terminal.size.width), @intCast(self.e.renderer.ascii.terminal.size.height));
         self.player = Player.init();
-        self.player.x = @as(i32, @bitCast(self.world.get_current_map().start_chunks.items[0].chunk_info.x));
-        self.player.y = @as(i32, @bitCast(self.world.get_current_map().start_chunks.items[0].chunk_info.y));
+        self.player.x = @as(IndexTypeI, @bitCast(self.world.get_current_map().start_chunks.items[0].chunk_info.x));
+        self.player.y = @as(IndexTypeI, @bitCast(self.world.get_current_map().start_chunks.items[0].chunk_info.y));
         self.e.on_key_down(Self, on_key_down, self);
         self.e.on_render(Self, on_render, self);
         self.e.on_mouse_change(Self, on_mouse_change, self);
