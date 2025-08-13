@@ -1,21 +1,10 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const emcc = @import("src/emcc.zig");
-// Although this function looks imperative, note that its job is to
-// declaratively construct a build graph that will be executed by an external
-// runner.
-pub fn build(b: *std.Build) !void {
-    // Standard target options allows the person running `zig build` to choose
-    // what target to build for. Here we do not override the defaults, which
-    // means any target is allowed, and the default is native. Other options
-    // for restricting supported target set are available.
-    const target = b.standardTargetOptions(.{});
 
-    // Standard optimization options allow the person running `zig build` to select
-    // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall. Here we do not
-    // set a preferred release mode, allowing the user to decide how to optimize.
-    const optimize = b.standardOptimizeOption(.{});
+const wasm_target: std.Target.Query = .{ .cpu_arch = .wasm32, .os_tag = .emscripten };
 
+pub fn build_target(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) !void {
     const imglib = b.dependency("imglib", .{});
     const termlib = b.dependency("terminal", .{});
     const commonlib = b.dependency("common", .{});
@@ -100,4 +89,19 @@ pub fn build(b: *std.Build) !void {
         const test_step = b.step("test", "Run unit tests");
         test_step.dependOn(&run_exe_unit_tests.step);
     }
+}
+pub fn build(b: *std.Build) !void {
+    // Standard target options allows the person running `zig build` to choose
+    // what target to build for. Here we do not override the defaults, which
+    // means any target is allowed, and the default is native. Other options
+    // for restricting supported target set are available.
+    const target = b.standardTargetOptions(.{});
+
+    // Standard optimization options allow the person running `zig build` to select
+    // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall. Here we do not
+    // set a preferred release mode, allowing the user to decide how to optimize.
+    const optimize = b.standardOptimizeOption(.{});
+
+    try build_target(b, b.resolveTargetQuery(wasm_target), .ReleaseSmall);
+    try build_target(b, target, optimize);
 }
