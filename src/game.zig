@@ -51,7 +51,7 @@ pub const Game = struct {
         self.window.deinit();
         self.tui.deinit();
     }
-
+    //TODO handle mouse/touch
     pub fn on_mouse_change(self: *Self, mouse_event: engine.MouseEvent) void {
         GAME_LOG.info("{any}\n", .{mouse_event});
         _ = self;
@@ -133,6 +133,7 @@ pub const Game = struct {
 
     pub fn run(self: *Self) !void {
         self.lock = std.Thread.Mutex{};
+        engine.set_wasm_terminal_size(35, 150);
         self.e = try Engine.init(self.allocator, TERMINAL_WIDTH_OFFSET, TERMINAL_HEIGHT_OFFSET, .ascii, ._2d, .color_true, if (builtin.os.tag == .emscripten) .wasm else .native, if (builtin.os.tag == .emscripten) .single else .multi);
         GAME_LOG.info("starting height {d}\n", .{self.e.renderer.ascii.terminal.size.height});
         self.window.is_ascii = true;
